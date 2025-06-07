@@ -81,6 +81,8 @@ export interface ContextData {
         totalScopes: number;
         errors: string[];
         threadId: number | null;
+        timestamp: string;
+        user: string;
     };
 }
 
@@ -88,6 +90,11 @@ export class ContextCollector extends EventEmitter {
     private delveClient: DelveClient;
     private context: ContextData;
     private isCollecting = false;
+    
+    // Optimization: Debounced collection
+    private collectionTimeout: NodeJS.Timeout | null = null;
+    private lastCollectionTime = 0;
+    private minCollectionInterval = 300; // Minimum 300ms between collections
 
     constructor(delveClient: DelveClient) {
         super();
@@ -105,7 +112,9 @@ export class ContextCollector extends EventEmitter {
                 totalFrames: 0,
                 totalScopes: 0,
                 errors: [],
-                threadId: null
+                threadId: null,
+                timestamp: new Date().toISOString(),
+                user: 'yashwanthnandam'
             }
         };
 
@@ -114,17 +123,17 @@ export class ContextCollector extends EventEmitter {
 
     private setupEventListeners() {
         this.delveClient.on('attached', () => {
-            console.log('🔗 DelveClient attached - waiting for stopped event');
+            console.log('🔗 DelveClient attached - ready for debugging');
             this.context.debugInfo.isConnected = true;
             this.context.debugInfo.isStopped = false;
             this.emit('collectionStarted');
         });
 
         this.delveClient.on('stopped', (eventBody) => {
-            console.log('🛑 Debug stopped - collecting context immediately');
+            console.log('🛑 Debug stopped - initiating context collection');
             this.context.debugInfo.isStopped = true;
             this.context.debugInfo.threadId = eventBody.threadId;
-            this.collectCurrentContext();
+            this.debouncedCollectCurrentContext();
         });
 
         this.delveClient.on('continued', () => {
@@ -150,6 +159,7 @@ export class ContextCollector extends EventEmitter {
         this.context.currentLocation = null;
         this.context.debugInfo.totalFrames = 0;
         this.context.debugInfo.totalScopes = 0;
+        this.context.debugInfo.timestamp = new Date().toISOString();
         this.emit('contextUpdated', this.context);
     }
 
@@ -160,8 +170,32 @@ export class ContextCollector extends EventEmitter {
 
     stopCollection() {
         this.isCollecting = false;
+        if (this.collectionTimeout) {
+            clearTimeout(this.collectionTimeout);
+            this.collectionTimeout = null;
+        }
         this.clearContext();
         console.log('⏹️ Context collection disabled');
+    }
+
+    // Optimization: Debounced collection to prevent spam
+    private debouncedCollectCurrentContext() {
+        if (this.collectionTimeout) {
+            clearTimeout(this.collectionTimeout);
+        }
+
+        const now = Date.now();
+        const timeSinceLastCollection = now - this.lastCollectionTime;
+        
+        if (timeSinceLastCollection < this.minCollectionInterval) {
+            // Delay collection if too recent
+            this.collectionTimeout = setTimeout(() => {
+                this.collectCurrentContext();
+            }, this.minCollectionInterval - timeSinceLastCollection);
+        } else {
+            // Collect immediately
+            this.collectCurrentContext();
+        }
     }
 
     async refreshAll() {
@@ -179,20 +213,44 @@ export class ContextCollector extends EventEmitter {
 
         const now = Date.now();
         this.context.debugInfo.lastCollection = now;
+        this.context.debugInfo.timestamp = new Date().toISOString();
         this.context.debugInfo.errors = [];
+        this.lastCollectionTime = now;
 
         try {
-            console.log('🔄 Starting context collection...');
+            console.log('🔄 Starting optimized context collection...');
             
-            await this.collectFunctionCalls();
-            await this.collectVariables();
-            await this.collectExecutionPaths();
-
-            console.log('✅ Context collection complete:', {
-                functionCalls: this.context.functionCalls.length,
-                variables: this.context.variables.length,
-                currentLocation: this.context.currentLocation
-            });
+            // Get current location first
+            const currentFrame = await this.delveClient.getCurrentFrame();
+            if (currentFrame) {
+                this.context.currentLocation = {
+                    file: currentFrame.source?.path || '',
+                    line: currentFrame.line,
+                    function: currentFrame.name
+                };
+                console.log('📍 Current location:', this.context.currentLocation);
+                
+                // Parallel collection for better performance
+                await Promise.all([
+                    this.collectFunctionCalls(),
+                    this.collectVariables(),
+                    this.collectExecutionPaths()
+                ]);
+                
+                console.log('✅ Context collection complete:', {
+                    functionCalls: this.context.functionCalls.length,
+                    variables: this.context.variables.length,
+                    currentLocation: this.context.currentLocation
+                });
+            } else {
+                console.log('⚠️ No business logic frame found - limited context available');
+                this.context.debugInfo.errors.push('Debugger stopped in infrastructure code. Set breakpoint in handler and make API request.');
+                this.context.currentLocation = {
+                    file: '',
+                    line: 0,
+                    function: 'Infrastructure Code (Not Business Logic)'
+                };
+            }
             
             this.emit('contextUpdated', this.context);
         } catch (error) {
@@ -211,18 +269,6 @@ export class ContextCollector extends EventEmitter {
 
         try {
             console.log('🎯 Collecting context at breakpoint...');
-            
-            // Get current location first
-            const currentFrame = await this.delveClient.getCurrentFrame();
-            if (currentFrame) {
-                this.context.currentLocation = {
-                    file: currentFrame.source?.path || '',
-                    line: currentFrame.line,
-                    function: currentFrame.name
-                };
-                console.log('📍 Current location:', this.context.currentLocation);
-            }
-
             await this.refreshAll();
         } catch (error) {
             console.error('❌ Error collecting current context:', error);
@@ -231,6 +277,12 @@ export class ContextCollector extends EventEmitter {
     }
 
     private async collectFunctionCalls() {
+        const currentFrame = await this.delveClient.getCurrentFrame();
+        if (!currentFrame) {
+            console.log('⚠️ No business logic frame - skipping function call collection');
+            return;
+        }
+
         try {
             const stackTrace = await this.delveClient.getStackTrace();
             this.context.debugInfo.totalFrames = stackTrace.length;
@@ -241,38 +293,55 @@ export class ContextCollector extends EventEmitter {
             }
 
             const allCalls: FunctionCall[] = [];
-
-            for (let i = 0; i < Math.min(stackTrace.length, 15); i++) {
-                const frame = stackTrace[i];
+            
+            // Only collect from frames that contain business logic
+            const businessFrames = stackTrace.filter(frame => {
+                const frameName = frame.name || '';
+                const framePath = frame.source?.path || '';
                 
+                return frameName.includes('Handler') || 
+                       frameName.includes('UseCase') || 
+                       frameName.includes('Service') ||
+                       framePath.includes('astrology-services/internal/') ||
+                       framePath.includes('yashwanthnandam'); // User-specific filter
+            }).slice(0, 10);
+            
+            console.log(`📊 Processing ${businessFrames.length} business logic frames (filtered from ${stackTrace.length} total)`);
+
+            // Parallel frame variable collection
+            const framePromises = businessFrames.map(async (frame, index) => {
                 try {
                     const parameters = await this.delveClient.getFrameVariables(frame.id);
                     
-                    const call: FunctionCall = {
+                    return {
                         id: `frame-${frame.id}`,
                         name: frame.name,
                         file: frame.source?.path || '',
                         line: frame.line,
                         parameters: this.simplifyParameters(parameters),
                         startTime: Date.now(),
-                        children: []
+                        children: [] as string[]
                     };
-                    allCalls.push(call);
                 } catch (error) {
-                    console.log(`⚠️ Could not get variables for frame ${i}: ${error.message}`);
-                    // Still add the call without parameters
-                    const call: FunctionCall = {
+                    console.log(`⚠️ Could not get variables for frame ${index}: ${error.message}`);
+                    return {
                         id: `frame-${frame.id}`,
                         name: frame.name,
                         file: frame.source?.path || '',
                         line: frame.line,
                         parameters: {},
                         startTime: Date.now(),
-                        children: []
+                        children: [] as string[]
                     };
-                    allCalls.push(call);
                 }
-            }
+            });
+
+            const frameResults = await Promise.allSettled(framePromises);
+            frameResults.forEach(result => {
+                if (result.status === 'fulfilled') {
+                    allCalls.push(result.value);
+                }
+            });
 
             // Build relationships
             for (let i = 0; i < allCalls.length - 1; i++) {
@@ -281,7 +350,7 @@ export class ContextCollector extends EventEmitter {
             }
 
             this.context.functionCalls = allCalls;
-            console.log(`✅ Collected ${allCalls.length} function calls`);
+            console.log(`✅ Collected ${allCalls.length} business logic function calls`);
             
         } catch (error) {
             console.error('❌ Error collecting function calls:', error);
@@ -301,29 +370,35 @@ export class ContextCollector extends EventEmitter {
 
             const allVariables: Variable[] = [];
 
-            for (const scope of scopes) {
+            // Parallel scope variable collection
+            const scopePromises = scopes.map(async (scope) => {
                 try {
                     const scopeVars = await this.delveClient.getScopeVariables(scope.variablesReference);
                     
-                    for (const variable of scopeVars) {
-                        const newVar: Variable = {
-                            name: variable.name,
-                            value: this.simplifyValue(variable.value),
-                            type: variable.type,
-                            scope: scope.name,
-                            isControlFlow: this.isControlFlowVariable(variable.name),
-                            changeHistory: [],
-                            dependencies: []
-                        };
-                        allVariables.push(newVar);
-                    }
+                    return scopeVars.map(variable => ({
+                        name: variable.name,
+                        value: this.simplifyValue(variable.value),
+                        type: variable.type,
+                        scope: scope.name,
+                        isControlFlow: this.isControlFlowVariable(variable.name),
+                        changeHistory: [] as VariableChange[],
+                        dependencies: [] as string[]
+                    }));
                 } catch (error) {
                     console.log(`⚠️ Error getting variables for scope ${scope.name}: ${error.message}`);
+                    return [];
                 }
-            }
+            });
+
+            const scopeResults = await Promise.allSettled(scopePromises);
+            scopeResults.forEach(result => {
+                if (result.status === 'fulfilled') {
+                    allVariables.push(...result.value);
+                }
+            });
 
             this.context.variables = allVariables;
-            console.log(`✅ Collected ${allVariables.length} variables`);
+            console.log(`✅ Collected ${allVariables.length} variables from business logic frame`);
             
         } catch (error) {
             console.error('❌ Error collecting variables:', error);
@@ -342,7 +417,7 @@ export class ContextCollector extends EventEmitter {
                 branches: [],
                 variables: this.context.variables
                     .filter(v => v.scope === 'Local' || v.scope === 'Arguments')
-                    .slice(0, 5)
+                    .slice(0, 15) // Increased limit
                     .map(v => v.name)
             };
             paths.push(path);
@@ -357,7 +432,7 @@ export class ContextCollector extends EventEmitter {
         let count = 0;
 
         for (const [key, value] of Object.entries(params)) {
-            if (count >= 10) break;
+            if (count >= 20) break; // Increased limit
             simplified[key] = this.simplifyValue(value);
             count++;
         }
@@ -366,26 +441,41 @@ export class ContextCollector extends EventEmitter {
     }
 
     private simplifyValue(value: any): any {
-        if (typeof value === 'string' && value.length > 200) {
-            return value.substring(0, 200) + '...';
+        if (typeof value === 'string' && value.length > 500) {
+            return value.substring(0, 500) + '... [truncated]';
+        }
+        if (typeof value === 'object' && value !== null) {
+            const str = JSON.stringify(value);
+            if (str.length > 500) {
+                return str.substring(0, 500) + '... [truncated]';
+            }
         }
         return value;
     }
 
     private isControlFlowVariable(varName: string): boolean {
-        const controlPatterns = ['err', 'error', 'ok', 'found', 'valid', 'success', 'flag'];
+        const controlPatterns = [
+            'err', 'error', 'ok', 'found', 'valid', 'success', 'flag', 
+            'result', 'status', 'response', 'req', 'request', 'ctx', 'context'
+        ];
         return controlPatterns.some(pattern => varName.toLowerCase().includes(pattern));
     }
 
-    getContext(): ContextData {
-        return { ...this.context };
-    }
-
+    // Enhanced search with better filtering
     searchVariables(query: string): Variable[] {
         const lowerQuery = query.toLowerCase();
         return this.context.variables.filter(v => 
             v.name.toLowerCase().includes(lowerQuery) ||
-            v.value.toString().toLowerCase().includes(lowerQuery)
+            v.value.toString().toLowerCase().includes(lowerQuery) ||
+            v.type.toLowerCase().includes(lowerQuery)
+        );
+    }
+
+    getBusinessVariables(): Variable[] {
+        return this.context.variables.filter(v => 
+            !v.name.startsWith('~') && 
+            !v.name.startsWith('.') &&
+            v.scope !== 'Registers'
         );
     }
 
@@ -397,8 +487,22 @@ export class ContextCollector extends EventEmitter {
         return this.context.variables.filter(v => v.changeHistory.length > 0);
     }
 
+    getContext(): ContextData {
+        return { 
+            ...this.context,
+            debugInfo: {
+                ...this.context.debugInfo,
+                timestamp: new Date().toISOString()
+            }
+        };
+    }
+
     dispose() {
         this.stopCollection();
+        if (this.collectionTimeout) {
+            clearTimeout(this.collectionTimeout);
+            this.collectionTimeout = null;
+        }
         this.removeAllListeners();
     }
 }
