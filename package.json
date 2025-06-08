@@ -1,17 +1,52 @@
 {
-  "name": "context-selector-debugger",
-  "displayName": "Context Selector Debugger",
-  "description": "Granular context selection for AI-powered Go debugging",
+  "name": "go-debugger-ai",
+  "displayName": "Go Debugger AI",
+  "description": "AI-powered Go debugging with symbolic execution and path-sensitivity analysis",
   "version": "1.0.0",
+  "publisher": "NandamYashwanth",
+  "author": {
+    "name": "Yashwanth Nandam",
+    "email": "yesnandam@example.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yashwanthnandam/go-debugger-ai.git"
+  },
+  "homepage": "https://github.com/yashwanthnandam/go-debugger-ai#readme",
+  "bugs": {
+    "url": "https://github.com/yashwanthnandam/go-debugger-ai/issues"
+  },
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
     "Debuggers",
-    "Programming Languages"
+    "Programming Languages",
+    "Machine Learning",
+    "Testing"
   ],
+  "keywords": [
+    "go",
+    "golang",
+    "debugger",
+    "ai",
+    "debugging",
+    "symbolic execution",
+    "path sensitivity",
+    "context analysis",
+    "delve",
+    "llm",
+    "chatgpt",
+    "anthropic"
+  ],
+  "galleryBanner": {
+    "color": "#00ADD8",
+    "theme": "dark"
+  },
+  "icon": "assets/icon.png",
   "activationEvents": [
-    "onDebug",
+    "onDebugSessionType:go",
     "onLanguage:go"
   ],
   "main": "./dist/extension.js",
@@ -19,67 +54,150 @@
     "commands": [
       {
         "command": "contextSelector.openView",
-        "title": "Open Context Selector",
-        "icon": "$(settings-gear)"
+        "title": "Open Context Analyzer",
+        "category": "Go Debug",
+        "icon": "$(graph-line)"
       },
       {
         "command": "contextSelector.refreshContext",
-        "title": "Refresh Context",
+        "title": "Refresh Debug Context",
+        "category": "Go Debug",
         "icon": "$(refresh)"
       },
       {
         "command": "contextSelector.exportContext",
-        "title": "Export Selected Context",
+        "title": "Export Debug Analysis",
+        "category": "Go Debug",
         "icon": "$(export)"
       },
-            {
+      {
         "command": "contextSelector.checkStopped",
-        "title": "Check If Debugger Stopped",
-        "category": "Debug"
+        "title": "Check Debugger Status",
+        "category": "Go Debug",
+        "icon": "$(debug-alt)"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "contextSelector.openView",
+          "when": "debugType == go || resourceExtname == .go"
+        },
+        {
+          "command": "contextSelector.refreshContext",
+          "when": "debugType == go"
+        },
+        {
+          "command": "contextSelector.exportContext",
+          "when": "debugType == go"
+        }
+      ],
+      "debug/toolbar": [
+        {
+          "command": "contextSelector.openView",
+          "when": "debugType == go",
+          "group": "navigation@1"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "contextSelector",
-          "title": "Context Selector",
-          "icon": "$(gear)"
+          "id": "goDebugAnalyzer",
+          "title": "Go Debug Analyzer",
+          "icon": "assets/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "goDebugAnalyzer": [
+        {
+          "id": "contextSelectorView",
+          "name": "Debug Context",
+          "when": "debugType == go || resourceExtname == .go",
+          "icon": "assets/icon.png"
         }
       ]
     },
     "configuration": {
-      "title": "Context Selector",
+      "title": "Go Debug Context Analyzer",
       "properties": {
+        "goDebugger.businessLogic.enableDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic business logic detection"
+        },
+        "goDebugger.businessLogic.applicationPatterns": {
+          "type": "array",
+          "default": [
+            "Handler)",
+            "Controller)",
+            "Service)",
+            "UseCase)",
+            "Repository)",
+            "Manager)",
+            ".Get",
+            ".Post",
+            ".Put",
+            ".Delete",
+            ".Create",
+            ".Update",
+            ".Process"
+          ],
+          "description": "Patterns to identify application code"
+        },
+        "goDebugger.variableAnalysis.maxVariableValueLength": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum length for variable values"
+        },
+        "goDebugger.variableAnalysis.enableTypeInference": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable smart type inference"
+        },
         "contextSelector.llm.provider": {
           "type": "string",
           "enum": ["openai", "anthropic", "azure", "custom"],
           "default": "openai",
-          "description": "LLM provider for context analysis"
+          "description": "AI provider for code analysis",
+          "enumDescriptions": [
+            "OpenAI GPT models",
+            "Anthropic Claude models", 
+            "Azure OpenAI Service",
+            "Custom endpoint"
+          ]
         },
         "contextSelector.llm.openaiApiKey": {
           "type": "string",
           "default": "",
-          "description": "OpenAI API key"
+          "description": "OpenAI API key for AI analysis",
+          "format": "password"
         },
         "contextSelector.llm.anthropicApiKey": {
-          "type": "string",
+          "type": "string", 
           "default": "",
-          "description": "Anthropic API key"
+          "description": "Anthropic API key for AI analysis",
+          "format": "password"
         },
         "contextSelector.llm.model": {
           "type": "string",
           "default": "gpt-4",
-          "description": "Model to use for analysis"
+          "description": "AI model to use for analysis"
         },
         "contextSelector.llm.temperature": {
           "type": "number",
           "default": 0.3,
-          "description": "Temperature for LLM responses"
+          "minimum": 0,
+          "maximum": 2,
+          "description": "AI response creativity (0-2)"
         },
         "contextSelector.llm.maxTokens": {
           "type": "number",
-          "default": 2000,
-          "description": "Maximum tokens in response"
+          "default": 4000,
+          "minimum": 100,
+          "maximum": 8000,
+          "description": "Maximum tokens in AI response"
         }
       }
     }
@@ -88,7 +206,9 @@
     "vscode:prepublish": "npm run package",
     "compile": "webpack --config webpack.config.js",
     "watch": "webpack --watch --config webpack.config.js",
-    "package": "webpack --mode production --devtool hidden-source-map"
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "test": "echo \"No tests specified\" && exit 0",
+    "lint": "echo \"No linting configured\" && exit 0"
   },
   "dependencies": {
     "node-fetch": "^2.6.7"

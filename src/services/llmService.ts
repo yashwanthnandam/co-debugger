@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import fetch from 'node-fetch';
 
 export interface LLMOptions {
@@ -24,12 +25,24 @@ export class LLMService {
     private requestCache = new Map<string, { response: LLMResponse; timestamp: number }>();
     private cacheTimeout = 300000; // 5 minutes
 
+    private getCurrentUser(): string {
+        return os.userInfo().username || 'unknown-user';
+    }
+
+    private getCurrentTimestamp(): string {
+        return new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    private getFormattedTime(): string {
+        return new Date().toISOString();
+    }
+
     async callLLM(context: string, query: string, options: LLMOptions): Promise<string> {
         // Check cache first
         const cacheKey = this.generateCacheKey(context, query, options);
         const cached = this.getCachedResponse(cacheKey);
         if (cached) {
-            console.log('🚀 Using cached LLM response');
+            console.log(`🚀 Using cached LLM response for ${this.getCurrentUser()} at ${this.getCurrentTimestamp()}`);
             return cached.content;
         }
 
@@ -58,7 +71,7 @@ export class LLMService {
             return response.content;
             
         } catch (error) {
-            console.error('❌ LLM call failed:', error);
+            console.error(`❌ LLM call failed for ${this.getCurrentUser()} at ${this.getCurrentTimestamp()}:`, error);
             throw error;
         }
     }
@@ -115,19 +128,19 @@ export class LLMService {
             throw new Error('OpenAI API key not configured. Please set contextSelector.llm.openaiApiKey in settings.');
         }
 
-        const systemPrompt = `You are an expert Go debugger assistant for user "yashwanthnandam". 
+        const systemPrompt = `You are an expert Go debugger assistant for user "${this.getCurrentUser()}". 
 
-Current context: You're analyzing a Go web application (astrology-services) that provides astrology-related APIs.
+Current context: You're analyzing a Go application that provides web services and APIs.
 
 Analyze the provided debugging context and provide specific, actionable insights about:
-1. Variable values and their business meaning
+1. Variable values and their application meaning
 2. Function execution flow
 3. Potential issues or bugs
 4. Suggestions for debugging steps
 
-Be concise but thorough. Focus on business logic rather than infrastructure code.
+Be concise but thorough. Focus on application logic rather than infrastructure code.
 
-Current time: ${new Date().toISOString()}`;
+Current time: ${this.getFormattedTime()}`;
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -150,7 +163,7 @@ Current time: ${new Date().toISOString()}`;
                 ],
                 temperature: options.temperature ?? 0.3,
                 max_tokens: options.maxTokens || 2000,
-                user: 'yashwanthnandam'
+                user: this.getCurrentUser()
             })
         });
 
@@ -164,7 +177,7 @@ Current time: ${new Date().toISOString()}`;
             content: data.choices[0].message.content,
             usage: data.usage,
             model: data.model,
-            timestamp: new Date().toISOString()
+            timestamp: this.getFormattedTime()
         };
     }
 
@@ -176,19 +189,19 @@ Current time: ${new Date().toISOString()}`;
             throw new Error('Anthropic API key not configured. Please set contextSelector.llm.anthropicApiKey in settings.');
         }
 
-        const systemPrompt = `You are an expert Go debugger assistant for user "yashwanthnandam".
+        const systemPrompt = `You are an expert Go debugger assistant for user "${this.getCurrentUser()}".
 
-Current context: You're analyzing a Go web application (astrology-services) that provides astrology-related APIs.
+Current context: You're analyzing a Go application that provides web services and APIs.
 
 Analyze the provided debugging context and provide specific, actionable insights about:
-1. Variable values and their business meaning  
+1. Variable values and their application meaning  
 2. Function execution flow
 3. Potential issues or bugs
 4. Suggestions for debugging steps
 
-Be concise but thorough. Focus on business logic rather than infrastructure code.
+Be concise but thorough. Focus on application logic rather than infrastructure code.
 
-Current time: ${new Date().toISOString()}`;
+Current time: ${this.getFormattedTime()}`;
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -222,7 +235,7 @@ Current time: ${new Date().toISOString()}`;
             content: data.content[0].text,
             usage: data.usage,
             model: data.model,
-            timestamp: new Date().toISOString()
+            timestamp: this.getFormattedTime()
         };
     }
 
@@ -249,7 +262,7 @@ Current time: ${new Date().toISOString()}`;
                 messages: [
                     {
                         role: 'system',
-                        content: 'You are a Go debugging expert. Analyze the provided debugging context and answer questions about code execution, variable changes, and function calls.'
+                        content: `You are a Go debugging expert for user "${this.getCurrentUser()}". Analyze the provided debugging context and answer questions about code execution, variable changes, and function calls. Focus on application logic and provide actionable insights.`
                     },
                     {
                         role: 'user',
@@ -271,7 +284,7 @@ Current time: ${new Date().toISOString()}`;
             content: data.choices[0].message.content,
             usage: data.usage,
             model: deploymentName,
-            timestamp: new Date().toISOString()
+            timestamp: this.getFormattedTime()
         };
     }
 
@@ -298,7 +311,7 @@ Current time: ${new Date().toISOString()}`;
             headers,
             body: JSON.stringify({
                 model: options.model || 'default',
-                prompt: `Query: ${query}\n\nContext: ${context}`,
+                prompt: `User: ${this.getCurrentUser()}\nQuery: ${query}\n\nContext: ${context}`,
                 temperature: options.temperature ?? 0.3,
                 max_tokens: options.maxTokens || 2000
             })
@@ -312,7 +325,7 @@ Current time: ${new Date().toISOString()}`;
 
         return {
             content: data.response || data.content || data.text,
-            timestamp: new Date().toISOString()
+            timestamp: this.getFormattedTime()
         };
     }
 
