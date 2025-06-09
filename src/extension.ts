@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as os from 'os';
 import { ContextSelectorView } from './views/contextSelectorView';
 import { ContextCollector } from './services/contextCollector';
 import { DelveClient } from './services/delveClient';
@@ -10,96 +9,70 @@ let delveClient: DelveClient;
 let llmService: LLMService;
 let contextSelectorView: ContextSelectorView;
 
-// Dynamic user and timestamp utilities
-function getCurrentUser(): string {
-    return os.userInfo().username || 'unknown-user';
-}
-
-function getCurrentTimestamp(): string {
-    return new Date().toISOString().slice(0, 19).replace('T', ' ');
-}
-
 export function activate(context: vscode.ExtensionContext) {
-    console.log(`🚀 Context Selector Debugger: Activated at ${getCurrentTimestamp()} by ${getCurrentUser()}`);
+    console.log(`🚀 Context Selector Debugger: Activated `);
 
-    // Initialize services with optimizations
+    // Initialize services
     delveClient = new DelveClient();
     llmService = new LLMService();
     contextCollector = new ContextCollector(delveClient);
     contextSelectorView = new ContextSelectorView(contextCollector, llmService, delveClient);
 
-    // Register commands with better logging
+    // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('contextSelector.openView', () => {
-            console.log(`📱 Opening Context Selector view at ${getCurrentTimestamp()}`);
+            console.log(`📱 Opening Context Selector view at 2025-06-09 03:05:14`);
             contextSelectorView.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.refreshContext', async () => {
-            console.log(`🔄 Manual refresh command triggered by ${getCurrentUser()} at ${getCurrentTimestamp()}`);
+            console.log(`🔄 Manual refresh command triggered by yashwanthnandam at 2025-06-09 03:05:14`);
             try {
                 await contextCollector.refreshAll();
                 contextSelectorView.refresh();
                 vscode.window.showInformationMessage('✅ Context refreshed successfully');
             } catch (error) {
-                console.error(`❌ Manual refresh failed at ${getCurrentTimestamp()}:`, error);
+                console.error(`❌ Manual refresh failed at 2025-06-09 03:05:14:`, error);
                 vscode.window.showErrorMessage(`❌ Refresh failed: ${error.message}`);
             }
         }),
 
         vscode.commands.registerCommand('contextSelector.exportContext', () => {
-            console.log(`📋 Exporting context for ${getCurrentUser()} at ${getCurrentTimestamp()}`);
-            contextSelectorView.exportContext(); // Fixed method name
-        }),
-
-        vscode.commands.registerCommand('contextSelector.checkStopped', async () => {
-            console.log(`🔍 Manual check stopped command by ${getCurrentUser()} at ${getCurrentTimestamp()}`);
-            if (delveClient.isConnected()) {
-                const stopped = await delveClient.forceCheckStopped();
-                const message = stopped ? '✅ Debugger is stopped at breakpoint' : '▶️ Debugger is running';
-                vscode.window.showInformationMessage(message);
-            } else {
-                vscode.window.showWarningMessage('❌ No debug session active');
-            }
+            console.log(`📋 Exporting context`);
+            contextSelectorView.exportContext();
         })
     );
 
-    // WEBHOOK-STYLE: Enhanced VS Code debug event handling
-    const debugEventSubscription = vscode.debug.onDidChangeBreakpoints((event) => {
-        console.log(`🔄 Breakpoints changed at ${getCurrentTimestamp()}:`, {
-            added: event.added.length,
-            removed: event.removed.length,
-            changed: event.changed.length
-        });
-    });
-
-    const debugStoppedSubscription = vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
-        if (event.session.configuration.type === 'go') {
-            if (event.event === 'stopped') {
-                console.log(`🛑 WEBHOOK EVENT: Debug stopped at ${getCurrentTimestamp()}`, event.body);
-                delveClient.notifyStoppedManually(event.body?.threadId || null);
-            } else if (event.event === 'continued') {
-                console.log(`▶️ WEBHOOK EVENT: Debug continued at ${getCurrentTimestamp()}`);
-                delveClient.notifyContinuedManually();
-            }
+    // Correct VS Code Debug Event Handlers
+    const onStackItemChanged = vscode.debug.onDidChangeActiveStackItem((stackItem) => {
+        if (stackItem && stackItem.session.configuration.type === 'go') {
+            console.log(`🎯 VS Code active stack item changed at 2025-06-09 03:05:14:`, {
+                sessionName: stackItem.session.name,
+                threadId: stackItem.threadId
+            });
+            
+            // This means debugger stopped and VS Code has selected a thread/stack item
+            delveClient.notifyStoppedFromVSCode();
+        } else if (!stackItem) {
+            console.log(`🔄 VS Code active stack item cleared at 2025-06-09 03:05:14`);
+            // This typically means debugger continued
+            delveClient.notifyContinuedFromVSCode();
         }
     });
 
-    // Enhanced session management
-    vscode.debug.onDidStartDebugSession((session) => {
+    const onDebugSessionStarted = vscode.debug.onDidStartDebugSession((session) => {
         if (session.configuration.type === 'go') {
-            console.log(`🔧 Go debug session started at ${getCurrentTimestamp()} for ${getCurrentUser()}:`, {
+            console.log(`🔧 Go debug session started at 2025-06-09 03:05:14 for yashwanthnandam:`, {
                 name: session.name,
                 type: session.type,
                 configuration: session.configuration.name
             });
+            
             delveClient.attachToSession(session);
             contextCollector.startCollection();
-            startIntelligentMonitoring();
             
-            // Show notification
             vscode.window.showInformationMessage(
-                `🚀 Context Selector connected to Go debugger for ${getCurrentUser()}`,
+                `🚀 Context Selector connected to Go debugger for yashwanthnandam`,
                 'Open Context View'
             ).then(selection => {
                 if (selection === 'Open Context View') {
@@ -109,135 +82,63 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    vscode.debug.onDidTerminateDebugSession((session) => {
+    const onDebugSessionTerminated = vscode.debug.onDidTerminateDebugSession((session) => {
         if (session.configuration.type === 'go') {
-            console.log(`🔌 Go debug session terminated at ${getCurrentTimestamp()}:`, session.name);
+            console.log(`🔌 Go debug session terminated at 2025-06-09 03:05:14:`, session.name);
             delveClient.detachFromSession();
             contextCollector.stopCollection();
-            stopIntelligentMonitoring();
             
-            vscode.window.showInformationMessage(`🛑 Context Selector disconnected from debugger for ${getCurrentUser()}`);
+            vscode.window.showInformationMessage(`🛑 Context Selector disconnected from debugger for yashwanthnandam`);
         }
     });
 
-    vscode.debug.onDidChangeActiveDebugSession((session) => {
+    const onDebugSessionChanged = vscode.debug.onDidChangeActiveDebugSession((session) => {
         if (session && session.configuration.type === 'go') {
-            console.log(`🔄 Active Go debug session changed at ${getCurrentTimestamp()}:`, session.name);
+            console.log(`🔄 Active Go debug session changed at 2025-06-09 03:05:14:`, session.name);
             delveClient.attachToSession(session);
             contextCollector.startCollection();
-            startIntelligentMonitoring();
         } else if (!session) {
-            console.log(`🔌 No active debug session at ${getCurrentTimestamp()}`);
-            stopIntelligentMonitoring();
+            console.log(`🔌 No active debug session at 2025-06-09 03:05:14`);
         }
     });
 
-    // Register subscriptions
-    context.subscriptions.push(debugEventSubscription, debugStoppedSubscription);
+    // Register all subscriptions
+    context.subscriptions.push(
+        onStackItemChanged,
+        onDebugSessionStarted, 
+        onDebugSessionTerminated,
+        onDebugSessionChanged
+    );
 
-    // Check for existing debug session
+    // Check for existing debug session and active stack item
     const activeSession = vscode.debug.activeDebugSession;
+    const activeStackItem = vscode.debug.activeStackItem;
+    
     if (activeSession && activeSession.configuration.type === 'go') {
-        console.log(`🔍 Found existing Go debug session at ${getCurrentTimestamp()}:`, activeSession.name);
+        console.log(`🔍 Found existing Go debug session at 2025-06-09 03:05:14:`, activeSession.name);
         delveClient.attachToSession(activeSession);
         contextCollector.startCollection();
-        startIntelligentMonitoring();
-    }
-
-    console.log(`✅ Context Selector Debugger fully activated for ${getCurrentUser()} at ${getCurrentTimestamp()}`);
-}
-
-// Intelligent monitoring with adaptive polling
-let monitoringInterval: NodeJS.Timeout | null = null;
-let lastKnownState = { stopped: false, threadId: null };
-let adaptivePollingInterval = 500; // Start with 500ms
-let consecutiveNoChanges = 0;
-let maxPollingInterval = 5000; // Maximum 5 seconds
-let minPollingInterval = 200; // Minimum 200ms
-
-function startIntelligentMonitoring() {
-    console.log(`🧠 Starting intelligent monitoring with adaptive polling at ${getCurrentTimestamp()}`);
-    
-    if (monitoringInterval) {
-        clearInterval(monitoringInterval);
-    }
-    
-    // Reset adaptive values
-    adaptivePollingInterval = 500;
-    consecutiveNoChanges = 0;
-    
-    const monitor = async () => {
-        if (!delveClient.isConnected()) {
-            return;
-        }
         
-        try {
-            const currentState = await delveClient.getCurrentDebugState();
-            
-            if (currentState.stopped !== lastKnownState.stopped || 
-                currentState.threadId !== lastKnownState.threadId) {
-                
-                console.log(`🔄 State change detected at ${getCurrentTimestamp()}: ${JSON.stringify(lastKnownState)} → ${JSON.stringify(currentState)}`);
-                
-                if (currentState.stopped && !lastKnownState.stopped) {
-                    console.log(`🛑 DETECTED BREAKPOINT HIT at ${getCurrentTimestamp()}!`);
-                    delveClient.notifyStoppedManually(currentState.threadId);
-                    adaptivePollingInterval = minPollingInterval; // Speed up after change
-                } else if (!currentState.stopped && lastKnownState.stopped) {
-                    console.log(`▶️ DETECTED DEBUGGER CONTINUED at ${getCurrentTimestamp()}!`);
-                    delveClient.notifyContinuedManually();
-                    adaptivePollingInterval = minPollingInterval; // Speed up after change
-                }
-                
-                lastKnownState = currentState;
-                consecutiveNoChanges = 0;
-            } else {
-                consecutiveNoChanges++;
-                
-                // Adaptive polling: slow down if no changes
-                if (consecutiveNoChanges > 3) {
-                    adaptivePollingInterval = Math.min(
-                        adaptivePollingInterval * 1.5, 
-                        maxPollingInterval
-                    );
-                } else if (consecutiveNoChanges > 10) {
-                    adaptivePollingInterval = maxPollingInterval;
-                }
-            }
-            
-        } catch (error) {
-            // Ignore monitoring errors but slow down polling
-            adaptivePollingInterval = Math.min(adaptivePollingInterval * 2, maxPollingInterval);
+        if (activeStackItem) {
+            console.log(`🎯 Found existing active stack item at 2025-06-09 03:05:14:`, {
+                sessionName: activeStackItem.session.name,
+                threadId: activeStackItem.threadId
+            });
+            delveClient.notifyStoppedFromVSCode();
         }
-        
-        // Schedule next check with adaptive interval
-        monitoringInterval = setTimeout(monitor, adaptivePollingInterval);
-    };
-    
-    // Start monitoring
-    monitor();
-}
-
-function stopIntelligentMonitoring() {
-    console.log(`🛑 Stopping intelligent monitoring at ${getCurrentTimestamp()}`);
-    if (monitoringInterval) {
-        clearTimeout(monitoringInterval);
-        monitoringInterval = null;
     }
-    lastKnownState = { stopped: false, threadId: null };
-    adaptivePollingInterval = 500;
-    consecutiveNoChanges = 0;
+
+    console.log(`✅ Context Selector Debugger fully activated for yashwanthnandam at 2025-06-09 03:05:14`);
 }
 
 export function deactivate() {
-    console.log(`👋 Context Selector Debugger: Deactivated for ${getCurrentUser()} at ${getCurrentTimestamp()}`);
-    stopIntelligentMonitoring();
+    console.log(`👋 Context Selector Debugger: Deactivated for yashwanthnandam at 2025-06-09 03:05:14`);
     
     try {
         delveClient?.dispose();
         contextCollector?.dispose();
-        console.log(`✅ All resources disposed successfully at ${getCurrentTimestamp()}`);
+        console.log(`✅ All resources disposed successfully at 2025-06-09 03:05:14`);
     } catch (error) {
-        console.error(`❌ Error during deactivation at ${getCurrentTimestamp()}:`, error);
+        console.error(`❌ Error during deactivation at 2025-06-09 03:05:14:`, error);
     }
 }
