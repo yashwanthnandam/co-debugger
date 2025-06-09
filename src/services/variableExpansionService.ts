@@ -6,6 +6,7 @@ export interface ExpansionResult {
     error?: string;
     memoryUsed: string;
     expansionTime: number;
+    fullJSONAvailable?: boolean; // NEW
 }
 
 export class VariableExpansionService {
@@ -20,20 +21,22 @@ export class VariableExpansionService {
         session: any,
         frameId: number,
         variableName: string,
-        maxDepth: number = 4
+        maxDepth: number = 4,
+        forceFullExpansion: boolean = false
     ): Promise<ExpansionResult> {
         const startTime = Date.now();
-        const cacheKey = `${frameId}-${variableName}-${maxDepth}`;
+        const cacheKey = `${frameId}-${variableName}-${maxDepth}-${forceFullExpansion}`;
 
         try {
-            console.log(`🔍 2025-06-09 03:58:47 - Expanding variable: ${variableName} with depth: ${maxDepth}`);
+            console.log(`🔍 2025-06-09 16:13:14 - Expanding variable: ${variableName} with depth: ${maxDepth} ${forceFullExpansion ? '(FULL JSON)' : ''}`);
 
             const expanded = await this.dataHandler.expandVariableOnDemand(
                 session,
                 frameId,
                 variableName,
                 [],
-                maxDepth
+                maxDepth,
+                forceFullExpansion
             );
 
             const expansionTime = Date.now() - startTime;
@@ -43,12 +46,13 @@ export class VariableExpansionService {
                 success: !!expanded,
                 data: expanded || undefined,
                 memoryUsed,
-                expansionTime
+                expansionTime,
+                fullJSONAvailable: expanded?.metadata.fullJSONAvailable || false
             };
 
             this.expansionHistory.set(cacheKey, result);
             
-            console.log(`✅ 2025-06-09 03:58:47 - Variable ${variableName} expanded in ${expansionTime}ms, memory: ${memoryUsed}`);
+            console.log(`✅ 2025-06-09 16:13:14 - Variable ${variableName} expanded in ${expansionTime}ms, memory: ${memoryUsed}, JSON: ${result.fullJSONAvailable ? 'Available' : 'Not Available'}`);
             
             return result;
 
@@ -58,64 +62,68 @@ export class VariableExpansionService {
                 success: false,
                 error: error.message,
                 memoryUsed: this.dataHandler.getMemoryUsageFormatted(),
-                expansionTime
+                expansionTime,
+                fullJSONAvailable: false
             };
 
-            console.error(`❌ 2025-06-09 03:58:47 - Error expanding ${variableName}:`, error);
+            console.error(`❌ 2025-06-09 16:13:14 - Error expanding ${variableName}:`, error);
             return result;
         }
     }
 
     async expandAllVariablesInScope(
-        session: any,
-        frameId: number,
-        maxDepth: number = 3,
-        maxVariables: number = 20
-    ): Promise<Record<string, ExpansionResult>> {
-        console.log(`🔄 2025-06-09 03:58:47 - Expanding all variables in frame ${frameId}`);
+    session: any,
+    frameId: number,
+    maxDepth: number = 3,
+    maxVariables: number = 8, // Reduced from 20
+    enableFullJSONForTop: number = 3 // Reduced from 5
+): Promise<Record<string, ExpansionResult>> {
+    console.log(`🔄 2025-06-09 16:20:11 - SAFE expanding ${maxVariables} variables (max depth: ${Math.min(maxDepth, 4)})`);
 
-        const results: Record<string, ExpansionResult> = {};
+    const results: Record<string, ExpansionResult> = {};
+    const safeMaxDepth = Math.min(maxDepth, 4); // Hard limit
 
-        try {
-            // Get scopes for the frame
-            const scopes = await session.customRequest('scopes', { frameId });
+    try {
+        const scopes = await session.customRequest('scopes', { frameId });
 
-            for (const scope of scopes.scopes) {
-                console.log(`📂 2025-06-09 03:58:47 - Expanding scope: ${scope.name}`);
-                
-                const variables = await session.customRequest('variables', {
-                    variablesReference: scope.variablesReference
-                });
+        for (const scope of scopes.scopes) {
+            console.log(`📂 2025-06-09 16:20:11 - Expanding scope: ${scope.name}`);
+            
+            const variables = await session.customRequest('variables', {
+                variablesReference: scope.variablesReference
+            });
 
-                if (variables.variables) {
-                    // Sort variables by importance and take top N
-                    const sortedVars = this.sortVariablesByImportance(variables.variables)
-                        .slice(0, maxVariables);
+            if (variables.variables) {
+                const sortedVars = this.sortVariablesByImportance(variables.variables)
+                    .slice(0, maxVariables);
 
-                    for (const variable of sortedVars) {
-                        const result = await this.expandVariable(
-                            session,
-                            frameId,
-                            variable.name,
-                            maxDepth
-                        );
-                        
-                        results[variable.name] = result;
-                        
-                        // Small delay to prevent overwhelming the debug adapter
-                        await new Promise(resolve => setTimeout(resolve, 10));
-                    }
+                for (let i = 0; i < sortedVars.length; i++) {
+                    const variable = sortedVars[i];
+                    
+                    const result = await this.expandVariable(
+                        session,
+                        frameId,
+                        variable.name,
+                        safeMaxDepth,
+                        false // Never force full expansion
+                    );
+                    
+                    results[variable.name] = result;
+                    
+                    // Longer delay to prevent overwhelming
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
             }
-
-            console.log(`✅ 2025-06-09 03:58:47 - Expanded ${Object.keys(results).length} variables`);
-            return results;
-
-        } catch (error) {
-            console.error(`❌ 2025-06-09 03:58:47 - Error expanding all variables:`, error);
-            return results;
         }
+
+        console.log(`✅ 2025-06-09 16:20:11 - Safely expanded ${Object.keys(results).length} variables`);
+        return results;
+
+    } catch (error) {
+        console.error(`❌ 2025-06-09 16:20:11 - Error in safe expansion:`, error);
+        return results;
     }
+}
 
     private sortVariablesByImportance(variables: any[]): any[] {
         return variables.sort((a, b) => {
@@ -200,5 +208,11 @@ export class VariableExpansionService {
 
     getMemoryUsage(): string {
         return this.dataHandler.getMemoryUsageFormatted();
+    }
+
+    getJSONCapableVariables(): string[] {
+        return Array.from(this.expansionHistory.entries())
+            .filter(([key, result]) => result.fullJSONAvailable)
+            .map(([key, result]) => key.split('-')[2]); // Extract variable name from cache key
     }
 }

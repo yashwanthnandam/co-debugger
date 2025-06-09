@@ -9,6 +9,7 @@ export interface SimplificationOptions {
     preserveBusinessFields: string[];
     enableLazyExpansion: boolean;
     memoryLimit: number; // MB
+    forceFullExpansion?: boolean; // NEW: Force complete expansion for JSON display
 }
 
 export interface SimplifiedValue {
@@ -29,6 +30,7 @@ export interface SimplifiedValue {
         lazyLoadId?: string;
         recursionDepth?: number;
         circularRefId?: string;
+        fullJSONAvailable?: boolean; // NEW: Indicates if full JSON can be generated
     };
 }
 
@@ -48,6 +50,7 @@ export interface RecursionContext {
     maxDepth: number;
     memoryUsed: number;
     memoryLimit: number;
+    forceFullExpansion?: boolean; // NEW
 }
 
 export class DataStructureHandler {
@@ -67,96 +70,446 @@ export class DataStructureHandler {
             'status', 'code', 'type', 'timestamp', 'created', 'updated'
         ],
         enableLazyExpansion: true,
-        memoryLimit: 50 // 50MB limit
+        memoryLimit: 50, // 50MB limit
+        forceFullExpansion: false
     };
 
     private expansionCache = new Map<string, SimplifiedValue>();
     private lazyExpansionRequests = new Map<string, VariableExpansionRequest>();
 
     /**
-     * Main entry point for variable simplification with recursive dereferencing
-     */
-    simplifyValue(
-        rawValue: string, 
-        typeName: string, 
-        options: Partial<SimplificationOptions> = {}
-    ): SimplifiedValue {
-        const opts = { ...this.defaultOptions, ...options };
-        
-        // Initialize recursion context
-        const context: RecursionContext = {
-            visited: new Set<string>(),
-            addressMap: new Map<string, SimplifiedValue>(),
-            currentDepth: 0,
-            maxDepth: opts.maxDepth,
-            memoryUsed: 0,
-            memoryLimit: opts.memoryLimit * 1024 * 1024
-        };
+ * FIXED: Main entry point with emergency safety
+ */
+simplifyValue(
+    rawValue: string, 
+    typeName: string, 
+    options: Partial<SimplificationOptions> = {}
+): SimplifiedValue {
+    const opts = { ...this.defaultOptions, ...options };
+    
+    // **ENFORCE SAFETY LIMITS**
+    const safeMaxDepth = Math.min(opts.maxDepth, 6); // Never exceed 6
+    const safeMemoryLimit = Math.min(opts.memoryLimit * 1024 * 1024, 100 * 1024 * 1024); // Max 100MB
+    
+    // Initialize recursion context with safety
+    const context: RecursionContext = {
+        visited: new Set<string>(),
+        addressMap: new Map<string, SimplifiedValue>(),
+        currentDepth: 0,
+        maxDepth: safeMaxDepth,
+        memoryUsed: 0,
+        memoryLimit: safeMemoryLimit,
+        forceFullExpansion: false // Always false to prevent infinite loops
+    };
 
-        console.log(`🔍 [${new Date().toISOString()}] Starting recursive simplification: ${typeName} = ${rawValue.substring(0, 100)}...`);
-        
+    console.log(`🔍 [2025-06-09 16:20:11] Safe simplification: ${typeName} (max depth: ${safeMaxDepth})`);
+    
+    try {
         return this.recursivelySimplify(rawValue, typeName, context, opts);
+    } catch (error) {
+        console.error(`❌ Fatal error in simplification:`, error);
+        return this.createSimpleValue(`[Fatal Error: ${error.message}]`, typeName);
     }
+}
 
     /**
-     * Recursive core function that handles all data types with proper dereferencing
+     * NEW: Force full expansion for JSON display
      */
-    private recursivelySimplify(
-        rawValue: string,
-        typeName: string,
-        context: RecursionContext,
-        options: SimplificationOptions
+    simplifyValueForJSON(
+        rawValue: string, 
+        typeName: string, 
+        maxDepth: number = 6
     ): SimplifiedValue {
-        // **RECURSION GUARD: Check depth and memory limits**
-        if (context.currentDepth >= context.maxDepth) {
-            console.log(`⚠️ Max depth ${context.maxDepth} reached at: ${typeName}`);
-            return this.createTruncatedValue(rawValue, typeName, `Max depth ${context.maxDepth} reached`);
-        }
-
-        if (context.memoryUsed >= context.memoryLimit) {
-            console.log(`⚠️ Memory limit ${options.memoryLimit}MB reached`);
-            return this.createTruncatedValue(rawValue, typeName, 'Memory limit exceeded');
-        }
-
-        // **STEP 1: Handle nil values early**
-        if (this.isNilValue(rawValue)) {
-            return this.createSimpleValue('nil', typeName, { isNil: true });
-        }
-
-        // **STEP 2: Parse Delve format and extract address**
-        const delveInfo = this.parseDelveFormat(rawValue, typeName);
-        if (delveInfo) {
-            return this.handleDelveFormat(delveInfo, context, options);
-        }
-
-        // **STEP 3: Handle pointer dereferencing with circular detection**
-        if (this.isPointerSyntax(rawValue, typeName)) {
-            return this.handlePointerDereferencing(rawValue, typeName, context, options);
-        }
-
-        // **STEP 4: Handle collections recursively**
-        if (this.isCollectionType(rawValue, typeName)) {
-            return this.handleCollectionRecursively(rawValue, typeName, context, options);
-        }
-
-        // **STEP 5: Handle structured data recursively**
-        if (this.isStructuredType(rawValue, typeName)) {
-            return this.handleStructRecursively(rawValue, typeName, context, options);
-        }
-
-        // **STEP 6: Handle primitives**
-        if (this.isPrimitiveType(typeName)) {
-            return this.handlePrimitive(rawValue, typeName, options);
-        }
-
-        // **FALLBACK: JSON or unknown**
-        if (this.isPossibleJSON(rawValue)) {
-            return this.handleJSONRecursively(rawValue, typeName, context, options);
-        }
-
-        return this.handlePrimitive(rawValue, typeName, options);
+        return this.simplifyValue(rawValue, typeName, {
+            maxDepth,
+            maxArrayLength: 200, // More items for JSON
+            maxStringLength: 5000, // Longer strings for JSON
+            maxObjectKeys: 200, // More fields for JSON
+            forceFullExpansion: true,
+            enableLazyExpansion: false,
+            truncateThreshold: 10000
+        });
     }
 
+  /**
+ * FIXED: Recursive core function with proper depth enforcement
+ */
+private recursivelySimplify(
+    rawValue: string,
+    typeName: string,
+    context: RecursionContext,
+    options: SimplificationOptions
+): SimplifiedValue {
+    // **STRICT RECURSION GUARD: Always enforce limits**
+    if (context.currentDepth >= context.maxDepth) {
+        console.log(`⚠️ HARD STOP at depth ${context.currentDepth}/${context.maxDepth} for: ${typeName}`);
+        return this.createTruncatedValue(rawValue, typeName, `Max depth ${context.maxDepth} reached`);
+    }
+
+    // **MEMORY LIMIT: Always enforce even with forceFullExpansion**
+    if (context.memoryUsed >= context.memoryLimit) {
+        console.log(`⚠️ MEMORY LIMIT reached: ${context.memoryUsed}/${context.memoryLimit}`);
+        return this.createTruncatedValue(rawValue, typeName, 'Memory limit exceeded');
+    }
+
+    // **CIRCULAR REFERENCE DETECTION: Check before processing**
+    const valueSignature = this.createValueSignature(rawValue, typeName, context.currentDepth);
+    if (context.visited.has(valueSignature)) {
+        console.log(`🔄 CIRCULAR REFERENCE detected: ${valueSignature}`);
+        return this.createSimpleValue(`[↻ Circular]`, typeName, {
+            circularRefId: valueSignature,
+            recursionDepth: context.currentDepth
+        });
+    }
+
+    // **MARK AS VISITED**
+    context.visited.add(valueSignature);
+
+    let result: SimplifiedValue;
+
+    try {
+        // **STEP 1: Handle nil values early**
+        if (this.isNilValue(rawValue)) {
+            result = this.createSimpleValue('nil', typeName, { isNil: true, fullJSONAvailable: true });
+        }
+        // **STEP 2: Parse Delve format and extract address**
+        else if (this.parseDelveFormat(rawValue, typeName)) {
+            const delveInfo = this.parseDelveFormat(rawValue, typeName);
+            result = this.handleDelveFormat(delveInfo!, context, options);
+        }
+        // **STEP 3: Handle pointer dereferencing with circular detection**
+        else if (this.isPointerSyntax(rawValue, typeName)) {
+            result = this.handlePointerDereferencing(rawValue, typeName, context, options);
+        }
+        // **STEP 4: Handle collections recursively**
+        else if (this.isCollectionType(rawValue, typeName)) {
+            result = this.handleCollectionRecursively(rawValue, typeName, context, options);
+        }
+        // **STEP 5: Handle structured data recursively**
+        else if (this.isStructuredType(rawValue, typeName)) {
+            result = this.handleStructRecursively(rawValue, typeName, context, options);
+        }
+        // **STEP 6: Handle primitives**
+        else if (this.isPrimitiveType(typeName)) {
+            result = this.handlePrimitive(rawValue, typeName, options);
+        }
+        // **FALLBACK: JSON or unknown**
+        else if (this.isPossibleJSON(rawValue)) {
+            result = this.handleJSONRecursively(rawValue, typeName, context, options);
+        }
+        else {
+            result = this.handlePrimitive(rawValue, typeName, options);
+        }
+    } catch (error) {
+        console.error(`❌ Error processing ${typeName} at depth ${context.currentDepth}:`, error);
+        result = this.createSimpleValue(`[Error: ${error.message}]`, typeName);
+    }
+
+    // **REMOVE FROM VISITED after processing**
+    context.visited.delete(valueSignature);
+
+    return result;
+}
+
+/**
+ * FIXED: Create unique signature for circular detection
+ */
+private createValueSignature(rawValue: string, typeName: string, depth: number): string {
+    // Create a unique signature that includes type, value hash, and reasonable depth
+    const valueHash = this.simpleHash(rawValue.substring(0, 100));
+    return `${typeName}:${valueHash}:${Math.floor(depth / 10)}`; // Group by depth ranges
+}
+
+private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
+}
+
+/**
+ * FIXED: Handle pointer dereferencing with strict depth control
+ */
+private handlePointerDereferencing(
+    rawValue: string,
+    typeName: string,
+    context: RecursionContext,
+    options: SimplificationOptions
+): SimplifiedValue {
+    console.log(`🎯 Dereferencing pointer at depth ${context.currentDepth}: ${typeName}`);
+
+    // **STRICT DEPTH LIMIT for pointers**
+    if (context.currentDepth >= 3) {
+        console.log(`⚠️ Pointer depth limit reached at ${context.currentDepth}`);
+        return this.createSimpleValue(`${typeName} {...}`, typeName, {
+            isPointer: true,
+            expandable: false, // Don't allow further expansion
+            recursionDepth: context.currentDepth
+        });
+    }
+
+    // Extract actual value from pointer syntax
+    const actualValue = this.extractPointerValue(rawValue);
+    const actualType = typeName.startsWith('*') ? typeName.substring(1) : typeName;
+
+    // **RECURSIVE DEREFERENCING with strict depth control**
+    if (actualValue !== rawValue) {
+        const childContext: RecursionContext = {
+            ...context,
+            currentDepth: context.currentDepth + 1,
+            visited: new Set(context.visited) // Create new visited set for this branch
+        };
+
+        const derefResult = this.recursivelySimplify(actualValue, actualType, childContext, options);
+        derefResult.metadata.isPointer = true;
+        derefResult.metadata.fullJSONAvailable = true;
+        
+        console.log(`✅ Successfully dereferenced: ${typeName} at depth ${context.currentDepth}`);
+        return derefResult;
+    }
+
+    // Fallback for complex or deep pointers
+    return this.createSimpleValue(`${actualType} {...}`, actualType, {
+        isPointer: true,
+        expandable: false,
+        recursionDepth: context.currentDepth
+    });
+}
+
+/**
+ * FIXED: Handle collections with strict limits
+ */
+private handleCollectionRecursively(
+    rawValue: string,
+    typeName: string,
+    context: RecursionContext,
+    options: SimplificationOptions
+): SimplifiedValue {
+    console.log(`📚 Processing collection at depth ${context.currentDepth}: ${typeName}`);
+
+    // **STRICT DEPTH CHECK**
+    if (context.currentDepth >= context.maxDepth - 1) {
+        return this.createSimpleValue(`${typeName}[...] (depth limit)`, typeName, {
+            expandable: false,
+            recursionDepth: context.currentDepth
+        });
+    }
+
+    // Extract collection metadata
+    const lengthMatch = rawValue.match(/len:\s*(\d+)|length:\s*(\d+)/);
+    const arrayLength = lengthMatch ? parseInt(lengthMatch[1] || lengthMatch[2]) : undefined;
+
+    if (arrayLength === 0 || rawValue === '[]' || rawValue === 'nil') {
+        return this.createSimpleValue('[]', typeName, { arrayLength: 0, fullJSONAvailable: true });
+    }
+
+    // **STRICT LIMITS**
+    const elements = this.parseArrayElements(rawValue);
+    const maxElements = Math.min(elements.length, 10); // Limit to 10 elements max
+    
+    const children: Record<string, SimplifiedValue> = {};
+    const childContext: RecursionContext = {
+        ...context,
+        currentDepth: context.currentDepth + 1,
+        visited: new Set(context.visited)
+    };
+
+    for (let i = 0; i < maxElements; i++) {
+        const element = elements[i];
+        const elementType = this.inferElementType(element, typeName);
+        
+        try {
+            children[`[${i}]`] = this.recursivelySimplify(element, elementType, childContext, options);
+        } catch (error) {
+            console.error(`❌ Error processing element ${i}:`, error);
+            children[`[${i}]`] = this.createSimpleValue(`[Error]`, elementType);
+            break; // Stop processing on error
+        }
+    }
+
+    const hasMore = elements.length > maxElements;
+    const displayValue = `Array[${elements.length}]${hasMore ? ` (showing ${maxElements})` : ''}`;
+
+    return {
+        originalType: typeName,
+        displayValue,
+        isExpanded: true,
+        hasMore,
+        children,
+        metadata: {
+            isPointer: false,
+            isNil: false,
+            arrayLength: elements.length,
+            expandable: false, // Prevent further expansion
+            recursionDepth: context.currentDepth,
+            fullJSONAvailable: true
+        }
+    };
+}
+
+/**
+ * FIXED: Handle structs with strict limits
+ */
+private handleStructRecursively(
+    rawValue: string,
+    typeName: string,
+    context: RecursionContext,
+    options: SimplificationOptions
+): SimplifiedValue {
+    console.log(`🏗️ Processing struct at depth ${context.currentDepth}: ${typeName}`);
+
+    // **STRICT DEPTH CHECK**
+    if (context.currentDepth >= context.maxDepth - 1) {
+        return this.createSimpleValue(`${typeName}{...} (depth limit)`, typeName, {
+            expandable: false,
+            recursionDepth: context.currentDepth
+        });
+    }
+
+    const fields = this.parseStructFields(rawValue);
+    
+    if (Object.keys(fields).length === 0) {
+        return this.createSimpleValue('{}', typeName, { fullJSONAvailable: true });
+    }
+
+    // **STRICT LIMITS**
+    const sortedFields = this.prioritizeFields(fields, options.preserveBusinessFields);
+    const maxFields = Math.min(Object.keys(sortedFields).length, 8); // Limit to 8 fields max
+    
+    const truncatedFields = Object.fromEntries(
+        Object.entries(sortedFields).slice(0, maxFields)
+    );
+
+    const children: Record<string, SimplifiedValue> = {};
+    const childContext: RecursionContext = {
+        ...context,
+        currentDepth: context.currentDepth + 1,
+        visited: new Set(context.visited)
+    };
+
+    Object.entries(truncatedFields).forEach(([key, value]) => {
+        const fieldType = this.inferFieldType(key, value);
+        
+        try {
+            children[key] = this.recursivelySimplify(value, fieldType, childContext, options);
+        } catch (error) {
+            console.error(`❌ Error processing field ${key}:`, error);
+            children[key] = this.createSimpleValue(`[Error]`, fieldType);
+        }
+    });
+
+    const hasMore = Object.keys(fields).length > maxFields;
+    const displayValue = this.createStructSummary(typeName, Object.keys(truncatedFields), hasMore);
+
+    return {
+        originalType: typeName,
+        displayValue,
+        isExpanded: true,
+        hasMore,
+        children,
+        metadata: {
+            isPointer: false,
+            isNil: false,
+            objectKeyCount: Object.keys(fields).length,
+            expandable: false, // Prevent further expansion
+            recursionDepth: context.currentDepth,
+            fullJSONAvailable: true
+        }
+    };
+}
+
+/**
+ * FIXED: Deep expand with emergency stops
+ */
+private async deepExpandVariable(
+    session: any,
+    variable: any,
+    path: string[],
+    maxDepth: number,
+    currentDepth: number,
+    forceFullExpansion: boolean = false
+): Promise<SimplifiedValue> {
+    // **EMERGENCY STOPS**
+    if (currentDepth >= 6) { // Hard limit regardless of settings
+        console.log(`🛑 EMERGENCY STOP at depth ${currentDepth} for ${variable.name}`);
+        return this.createTruncatedValue(
+            variable.value,
+            variable.type,
+            `Emergency stop at depth ${currentDepth}`
+        );
+    }
+
+    if (path.length > 10) { // Prevent deep path traversal
+        console.log(`🛑 PATH LIMIT reached for ${variable.name}: ${path.length}`);
+        return this.createTruncatedValue(
+            variable.value,
+            variable.type,
+            `Path limit exceeded`
+        );
+    }
+
+    const result: SimplifiedValue = {
+        originalType: variable.type,
+        displayValue: variable.value,
+        isExpanded: true,
+        hasMore: false,
+        children: {},
+        metadata: {
+            isPointer: variable.type?.includes('*') || false,
+            isNil: variable.value === 'nil' || variable.value === '<nil>',
+            sizeEstimate: this.estimateSize(variable.value),
+            recursionDepth: currentDepth,
+            fullJSONAvailable: true
+        }
+    };
+
+    // **RECURSIVE EXPANSION with strict limits**
+    if (variable.variablesReference && variable.variablesReference > 0 && currentDepth < 4) {
+        try {
+            const children = await session.customRequest('variables', {
+                variablesReference: variable.variablesReference
+            });
+            
+            if (children.variables && children.variables.length > 0) {
+                console.log(`📂 Expanding ${Math.min(children.variables.length, 5)} children for ${variable.name} at depth ${currentDepth}`);
+                
+                const sortedChildren = this.sortChildrenByImportance(children.variables);
+                const maxChildren = Math.min(sortedChildren.length, 5); // Hard limit of 5 children
+                
+                for (let i = 0; i < maxChildren; i++) {
+                    const child = sortedChildren[i];
+                    const childPath = [...path, child.name];
+                    
+                    result.children![child.name] = await this.deepExpandVariable(
+                        session,
+                        child,
+                        childPath,
+                        maxDepth,
+                        currentDepth + 1,
+                        false // Never force full expansion in recursion
+                    );
+                }
+                
+                result.hasMore = children.variables.length > maxChildren;
+                result.metadata.objectKeyCount = children.variables.length;
+                result.displayValue = this.createStructSummary(
+                    variable.type,
+                    Object.keys(result.children!),
+                    result.hasMore
+                );
+            }
+        } catch (error) {
+            console.error(`❌ Error expanding children for ${variable.name}:`, error);
+            result.displayValue = `${variable.type} {Error: ${error.message}}`;
+            result.metadata.fullJSONAvailable = false;
+        }
+    }
+
+    return result;
+}
     /**
      * Parse Delve's debugging format: <*Type>(0xAddress) or <Type> (length: X, cap: Y)
      */
@@ -209,7 +562,8 @@ export class DataStructureHandler {
                 return this.createSimpleValue(`[↻ Circular: ${addressId}]`, delveInfo.originalType, {
                     isPointer: true,
                     memoryAddress: addressId,
-                    circularRefId: addressId
+                    circularRefId: addressId,
+                    fullJSONAvailable: false
                 });
             }
 
@@ -236,7 +590,8 @@ export class DataStructureHandler {
                     isPointer: true,
                     memoryAddress: addressId,
                     expandable: true,
-                    recursionDepth: context.currentDepth
+                    recursionDepth: context.currentDepth,
+                    fullJSONAvailable: true
                 }
             );
 
@@ -256,173 +611,16 @@ export class DataStructureHandler {
                 {
                     arrayLength: delveInfo.length,
                     expandable: delveInfo.length > 0,
-                    recursionDepth: context.currentDepth
+                    recursionDepth: context.currentDepth,
+                    fullJSONAvailable: true
                 }
             );
         }
 
-        return this.createSimpleValue(delveInfo.rawValue, delveInfo.originalType);
+        return this.createSimpleValue(delveInfo.rawValue, delveInfo.originalType, { fullJSONAvailable: true });
     }
 
-    /**
-     * Handle actual Go pointer syntax with recursive dereferencing
-     */
-    private handlePointerDereferencing(
-        rawValue: string,
-        typeName: string,
-        context: RecursionContext,
-        options: SimplificationOptions
-    ): SimplifiedValue {
-        console.log(`🎯 Dereferencing pointer: ${typeName} = ${rawValue.substring(0, 50)}...`);
-
-        // Extract actual value from pointer syntax
-        const actualValue = this.extractPointerValue(rawValue);
-        const actualType = typeName.startsWith('*') ? typeName.substring(1) : typeName;
-
-        // **RECURSIVE DEREFERENCING with depth control**
-        if (actualValue !== rawValue && context.currentDepth < 3) {
-            const childContext: RecursionContext = {
-                ...context,
-                currentDepth: context.currentDepth + 1
-            };
-
-            const derefResult = this.recursivelySimplify(actualValue, actualType, childContext, options);
-            derefResult.metadata.isPointer = true;
-            
-            console.log(`✅ Successfully dereferenced: ${typeName} → ${derefResult.displayValue}`);
-            return derefResult;
-        }
-
-        // Fallback for complex or deep pointers
-        return this.createSimpleValue(`${actualType} {...}`, actualType, {
-            isPointer: true,
-            expandable: true,
-            recursionDepth: context.currentDepth
-        });
-    }
-
-    /**
-     * Handle collections with recursive element processing
-     */
-    private handleCollectionRecursively(
-        rawValue: string,
-        typeName: string,
-        context: RecursionContext,
-        options: SimplificationOptions
-    ): SimplifiedValue {
-        console.log(`📚 Processing collection: ${typeName} = ${rawValue.substring(0, 50)}...`);
-
-        // Extract collection metadata
-        const lengthMatch = rawValue.match(/len:\s*(\d+)|length:\s*(\d+)/);
-        const capacityMatch = rawValue.match(/cap:\s*(\d+)/);
-        const arrayLength = lengthMatch ? parseInt(lengthMatch[1] || lengthMatch[2]) : undefined;
-
-        if (arrayLength === 0 || rawValue === '[]' || rawValue === 'nil') {
-            return this.createSimpleValue('[]', typeName, { arrayLength: 0 });
-        }
-
-        // **RECURSIVE ELEMENT PROCESSING**
-        const elements = this.parseArrayElements(rawValue);
-        const children: Record<string, SimplifiedValue> = {};
-        const maxElements = Math.min(elements.length, options.maxArrayLength);
-
-        const childContext: RecursionContext = {
-            ...context,
-            currentDepth: context.currentDepth + 1
-        };
-
-        for (let i = 0; i < maxElements; i++) {
-            const element = elements[i];
-            const elementType = this.inferElementType(element, typeName);
-            
-            try {
-                children[`[${i}]`] = this.recursivelySimplify(element, elementType, childContext, options);
-            } catch (error) {
-                console.error(`❌ Error processing element ${i}:`, error);
-                children[`[${i}]`] = this.createSimpleValue(`[Error: ${error.message}]`, elementType);
-            }
-        }
-
-        const hasMore = elements.length > options.maxArrayLength;
-        const displayValue = hasMore 
-            ? `Array[${elements.length}] (showing first ${options.maxArrayLength})`
-            : `Array[${elements.length}]`;
-
-        return {
-            originalType: typeName,
-            displayValue,
-            isExpanded: false,
-            hasMore,
-            children,
-            metadata: {
-                isPointer: false,
-                isNil: false,
-                arrayLength: elements.length,
-                expandable: true,
-                recursionDepth: context.currentDepth
-            }
-        };
-    }
-
-    /**
-     * Handle structs with recursive field processing
-     */
-    private handleStructRecursively(
-        rawValue: string,
-        typeName: string,
-        context: RecursionContext,
-        options: SimplificationOptions
-    ): SimplifiedValue {
-        console.log(`🏗️ Processing struct: ${typeName} = ${rawValue.substring(0, 50)}...`);
-
-        const fields = this.parseStructFields(rawValue);
-        
-        if (Object.keys(fields).length === 0) {
-            return this.createSimpleValue('{}', typeName);
-        }
-
-        // **RECURSIVE FIELD PROCESSING**
-        const sortedFields = this.prioritizeFields(fields, options.preserveBusinessFields);
-        const truncatedFields = Object.fromEntries(
-            Object.entries(sortedFields).slice(0, options.maxObjectKeys)
-        );
-
-        const children: Record<string, SimplifiedValue> = {};
-        const childContext: RecursionContext = {
-            ...context,
-            currentDepth: context.currentDepth + 1
-        };
-
-        Object.entries(truncatedFields).forEach(([key, value]) => {
-            const fieldType = this.inferFieldType(key, value);
-            
-            try {
-                children[key] = this.recursivelySimplify(value, fieldType, childContext, options);
-            } catch (error) {
-                console.error(`❌ Error processing field ${key}:`, error);
-                children[key] = this.createSimpleValue(`[Error: ${error.message}]`, fieldType);
-            }
-        });
-
-        const hasMore = Object.keys(fields).length > options.maxObjectKeys;
-        const displayValue = this.createStructSummary(typeName, Object.keys(truncatedFields), hasMore);
-
-        return {
-            originalType: typeName,
-            displayValue,
-            isExpanded: false,
-            hasMore,
-            children,
-            metadata: {
-                isPointer: false,
-                isNil: false,
-                objectKeyCount: Object.keys(fields).length,
-                expandable: true,
-                recursionDepth: context.currentDepth
-            }
-        };
-    }
-
+  
     /**
      * Handle JSON with recursive parsing
      */
@@ -441,12 +639,15 @@ export class DataStructureHandler {
                 currentDepth: context.currentDepth + 1
             };
 
-            return this.recursivelySimplify(
+            const result = this.recursivelySimplify(
                 JSON.stringify(parsed, null, 2),
                 jsonType,
                 childContext,
                 options
             );
+            
+            result.metadata.fullJSONAvailable = true;
+            return result;
         } catch {
             return this.handlePrimitive(rawValue, typeName, options);
         }
@@ -467,8 +668,8 @@ export class DataStructureHandler {
             displayValue = displayValue.slice(1, -1);
         }
 
-        // Smart truncation
-        if (displayValue.length > options.maxStringLength) {
+        // Smart truncation - but not for full expansion mode
+        if (displayValue.length > options.maxStringLength && !options.forceFullExpansion) {
             return this.createTruncatedValue(
                 displayValue.substring(0, options.maxStringLength),
                 typeName,
@@ -476,18 +677,19 @@ export class DataStructureHandler {
             );
         }
 
-        return this.createSimpleValue(displayValue, typeName);
+        return this.createSimpleValue(displayValue, typeName, { fullJSONAvailable: true });
     }
 
-    // **ASYNC ON-DEMAND EXPANSION**
+    // **ASYNC ON-DEMAND EXPANSION WITH FULL JSON SUPPORT**
     async expandVariableOnDemand(
         session: any,
         frameId: number,
         variableName: string,
         path: string[] = [],
-        maxDepth: number = 3
+        maxDepth: number = 3,
+        forceFullExpansion: boolean = false
     ): Promise<SimplifiedValue | null> {
-        const cacheKey = `${frameId}-${variableName}-${path.join('.')}-${maxDepth}`;
+        const cacheKey = `${frameId}-${variableName}-${path.join('.')}-${maxDepth}-${forceFullExpansion}`;
         
         if (this.expansionCache.has(cacheKey)) {
             console.log(`♻️ Using cached expansion for: ${variableName}`);
@@ -495,7 +697,7 @@ export class DataStructureHandler {
         }
 
         try {
-            console.log(`🔍 [${new Date().toISOString()}] On-demand expansion: ${variableName} at path: [${path.join(' → ')}] depth: ${maxDepth}`);
+            console.log(`🔍 [2025-06-09 16:08:51] On-demand expansion: ${variableName} at path: [${path.join(' → ')}] depth: ${maxDepth} ${forceFullExpansion ? '(FULL)' : ''}`);
             
             const scopes = await session.customRequest('scopes', { frameId });
             
@@ -511,7 +713,8 @@ export class DataStructureHandler {
                         targetVar,
                         path,
                         maxDepth,
-                        0
+                        0,
+                        forceFullExpansion
                     );
                     
                     this.expansionCache.set(cacheKey, expanded);
@@ -527,80 +730,95 @@ export class DataStructureHandler {
         }
     }
 
-    private async deepExpandVariable(
-        session: any,
-        variable: any,
-        path: string[],
-        maxDepth: number,
-        currentDepth: number
-    ): Promise<SimplifiedValue> {
+
+    // **NEW: Generate complete JSON from SimplifiedValue**
+    generateCompleteJSON(simplified: SimplifiedValue, currentDepth: number = 0, maxDepth: number = 6): any {
         if (currentDepth >= maxDepth) {
-            return this.createTruncatedValue(
-                variable.value,
-                variable.type,
-                `Max expansion depth ${maxDepth} reached`
-            );
+            return "[Max depth reached]";
         }
 
-        const result: SimplifiedValue = {
-            originalType: variable.type,
-            displayValue: variable.value,
-            isExpanded: true,
-            hasMore: false,
-            children: {},
-            metadata: {
-                isPointer: variable.type?.includes('*') || false,
-                isNil: variable.value === 'nil' || variable.value === '<nil>',
-                sizeEstimate: this.estimateSize(variable.value),
-                recursionDepth: currentDepth
-            }
-        };
+        if (simplified.metadata.isNil) {
+            return null;
+        }
 
-        // **RECURSIVE EXPANSION via variablesReference**
-        if (variable.variablesReference && variable.variablesReference > 0) {
-            try {
-                const children = await session.customRequest('variables', {
-                    variablesReference: variable.variablesReference
+        // Handle primitives
+        if (!simplified.children || Object.keys(simplified.children).length === 0) {
+            return this.parseDisplayValueToJSON(simplified.displayValue, simplified.originalType);
+        }
+
+        // Handle objects with children
+        if (simplified.children) {
+            const isArray = Object.keys(simplified.children).every(key => key.match(/^\[\d+\]$/));
+            
+            if (isArray) {
+                // Handle arrays
+                const array: any[] = [];
+                Object.entries(simplified.children)
+                    .sort(([a], [b]) => {
+                        const aIndex = parseInt(a.replace(/[\[\]]/g, ''));
+                        const bIndex = parseInt(b.replace(/[\[\]]/g, ''));
+                        return aIndex - bIndex;
+                    })
+                    .forEach(([key, value]) => {
+                        array.push(this.generateCompleteJSON(value, currentDepth + 1, maxDepth));
+                    });
+                return array;
+                        } else {
+                // Handle objects
+                const obj: any = {};
+                Object.entries(simplified.children).forEach(([key, value]) => {
+                    obj[key] = this.generateCompleteJSON(value, currentDepth + 1, maxDepth);
                 });
-                
-                if (children.variables && children.variables.length > 0) {
-                    console.log(`📂 Expanding ${children.variables.length} children for ${variable.name} at depth ${currentDepth}`);
-                    
-                    const sortedChildren = this.sortChildrenByImportance(children.variables);
-                    const maxChildren = Math.min(sortedChildren.length, this.defaultOptions.maxObjectKeys);
-                    
-                    for (let i = 0; i < maxChildren; i++) {
-                        const child = sortedChildren[i];
-                        const childPath = [...path, child.name];
-                        
-                        result.children![child.name] = await this.deepExpandVariable(
-                            session,
-                            child,
-                            childPath,
-                            maxDepth,
-                            currentDepth + 1
-                        );
-                    }
-                    
-                    if (children.variables.length > this.defaultOptions.maxObjectKeys) {
-                        result.hasMore = true;
-                        result.metadata.truncatedAt = this.defaultOptions.maxObjectKeys;
-                    }
-                    
-                    result.metadata.objectKeyCount = children.variables.length;
-                    result.displayValue = this.createStructSummary(
-                        variable.type,
-                        Object.keys(result.children!),
-                        result.hasMore
-                    );
-                }
-            } catch (error) {
-                console.error(`❌ Error expanding children for ${variable.name}:`, error);
-                result.displayValue = `${variable.type} {Error: ${error.message}}`;
+                return obj;
             }
         }
 
-        return result;
+        return this.parseDisplayValueToJSON(simplified.displayValue, simplified.originalType);
+    }
+
+    private parseDisplayValueToJSON(displayValue: string, type: string): any {
+        if (!displayValue || displayValue === 'nil' || displayValue === '<nil>') {
+            return null;
+        }
+
+        // Handle quoted strings
+        if (displayValue.startsWith('"') && displayValue.endsWith('"')) {
+            return displayValue.slice(1, -1);
+        }
+
+        // Handle booleans
+        if (displayValue === 'true' || displayValue === 'false') {
+            return displayValue === 'true';
+        }
+
+        // Handle numbers
+        if (/^\d+$/.test(displayValue)) {
+            return parseInt(displayValue);
+        }
+
+        if (/^\d+\.\d+$/.test(displayValue)) {
+            return parseFloat(displayValue);
+        }
+
+        // Handle arrays
+        if (displayValue.startsWith('[') && displayValue.endsWith(']')) {
+            try {
+                return JSON.parse(displayValue);
+            } catch {
+                return displayValue;
+            }
+        }
+
+        // Handle objects
+        if (displayValue.startsWith('{') && displayValue.endsWith('}')) {
+            try {
+                return JSON.parse(displayValue);
+            } catch {
+                return displayValue;
+            }
+        }
+
+        return displayValue;
     }
 
     // **UTILITY METHODS**
@@ -850,6 +1068,7 @@ export class DataStructureHandler {
                 isPointer: false,
                 isNil: false,
                 sizeEstimate: this.estimateSize(displayValue),
+                fullJSONAvailable: false,
                 ...metadata
             }
         };
@@ -869,7 +1088,8 @@ export class DataStructureHandler {
                 isPointer: false,
                 isNil: false,
                 truncatedAt: displayValue.length,
-                expandable: true
+                expandable: true,
+                fullJSONAvailable: false
             }
         };
     }
@@ -903,7 +1123,7 @@ export class DataStructureHandler {
     clearCache(): void {
         this.expansionCache.clear();
         this.lazyExpansionRequests.clear();
-        console.log(`🧹 [${new Date().toISOString()}] Cache cleared`);
+        console.log(`🧹 [2025-06-09 16:13:14] Cache cleared`);
     }
 
     getMemoryUsage(): number {

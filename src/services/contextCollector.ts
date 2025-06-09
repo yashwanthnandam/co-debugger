@@ -614,32 +614,87 @@ export class ContextCollector extends EventEmitter {
     }
 
     private convertExpandedToVariable(name: string, expanded: SimplifiedValue, result: ExpansionResult): Variable {
-        // Convert our expanded format to the Variable interface
-        const displayValue = this.createDisplayValueFromExpanded(expanded);
+    // Convert our expanded format to the Variable interface with full JSON support
+    const displayValue = this.createDisplayValueFromExpanded(expanded);
+    
+    return {
+        name,
+        value: displayValue,
+        type: expanded.originalType,
+        scope: 'Local', // Will be updated when we merge with basic variables
+        isControlFlow: this.isControlFlowVariable(name),
+        isApplicationRelevant: this.isApplicationRelevantVariable(name, displayValue),
+        changeHistory: [],
+        dependencies: this.extractDependencies(expanded),
+        metadata: {
+            isPointer: expanded.metadata.isPointer,
+            isNil: expanded.metadata.isNil,
+            memoryAddress: expanded.metadata.memoryAddress,
+            arrayLength: expanded.metadata.arrayLength,
+            objectKeyCount: expanded.metadata.objectKeyCount,
+            truncatedAt: expanded.metadata.truncatedAt,
+            isExpandable: expanded.hasMore || !!expanded.children,
+            rawValue: this.createFullJSONFromExpanded(expanded), // NEW: Store full JSON
+            expansionDepth: this.calculateExpansionDepth(expanded),
+            memoryUsage: result.memoryUsed
+        }
+    };
+}
+private createFullJSONFromExpanded(expanded: SimplifiedValue): string {
+    try {
+        if (expanded.metadata.fullJSONAvailable && expanded.children) {
+            const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, 6);
+            return JSON.stringify(fullJSON, null, 2);
+        }
         
-        return {
-            name,
-            value: displayValue,
-            type: expanded.originalType,
-            scope: 'Local', // Will be updated when we merge with basic variables
-            isControlFlow: this.isControlFlowVariable(name),
-            isApplicationRelevant: this.isApplicationRelevantVariable(name, displayValue),
-            changeHistory: [],
-            dependencies: this.extractDependencies(expanded),
-            metadata: {
-                isPointer: expanded.metadata.isPointer,
-                isNil: expanded.metadata.isNil,
-                memoryAddress: expanded.metadata.memoryAddress,
-                arrayLength: expanded.metadata.arrayLength,
-                objectKeyCount: expanded.metadata.objectKeyCount,
-                truncatedAt: expanded.metadata.truncatedAt,
-                isExpandable: expanded.hasMore || !!expanded.children,
-                rawValue: expanded.children ? JSON.stringify(expanded.children, null, 2) : expanded.displayValue,
-                expansionDepth: this.calculateExpansionDepth(expanded),
-                memoryUsage: result.memoryUsed
-            }
-        };
+        if (expanded.children && Object.keys(expanded.children).length > 0) {
+            // Fallback: create JSON from children
+            const obj: any = {};
+            Object.entries(expanded.children).forEach(([key, value]) => {
+                try {
+                    if (value.children) {
+                        obj[key] = this.dataHandler.generateCompleteJSON(value, 0, 6);
+                    } else {
+                        obj[key] = this.parseSimpleValue(value.displayValue, value.originalType);
+                    }
+                } catch (error) {
+                    obj[key] = value.displayValue;
+                }
+            });
+            return JSON.stringify(obj, null, 2);
+        }
+        
+        return expanded.displayValue;
+    } catch (error) {
+        console.error(`❌ Error creating JSON from expanded variable at 2025-06-09 16:13:14:`, error);
+        return expanded.displayValue;
     }
+}
+
+private parseSimpleValue(displayValue: string, type: string): any {
+    if (!displayValue || displayValue === 'nil' || displayValue === '<nil>') {
+        return null;
+    }
+
+    if (displayValue.startsWith('"') && displayValue.endsWith('"')) {
+        return displayValue.slice(1, -1);
+    }
+
+    if (displayValue === 'true' || displayValue === 'false') {
+        return displayValue === 'true';
+    }
+
+    if (/^\d+$/.test(displayValue)) {
+        return parseInt(displayValue);
+    }
+
+    if (/^\d+\.\d+$/.test(displayValue)) {
+        return parseFloat(displayValue);
+    }
+
+    return displayValue;
+}
+
 
     private extractDependencies(expanded: SimplifiedValue): string[] {
         const dependencies: string[] = [];
@@ -1055,31 +1110,45 @@ export class ContextCollector extends EventEmitter {
         return hasApplicationKeyword || hasMeaningfulValue;
     }
 
-    // Enhanced variable expansion method for specific variables
-    async expandSpecificVariable(variableName: string, maxDepth: number = 6): Promise<SimplifiedValue | null> {
-        const frameId = this.delveClient.getCurrentFrameId();
-        if (!frameId) {
-            console.log(`❌ No frame ID available for expanding ${variableName}`);
-            return null;
-        }
+    async expandSpecificVariable(variableName: string, maxDepth: number = 6, forceFullExpansion: boolean = false): Promise<SimplifiedValue | null> {
+    const frameId = this.delveClient.getCurrentFrameId();
+    if (!frameId) {
+        console.log(`❌ No frame ID available for expanding ${variableName} at 2025-06-09 16:13:14`);
+        return null;
+    }
 
-        console.log(`🔍 Expanding specific variable: ${variableName} with depth ${maxDepth} at ${this.getCurrentTimestamp()}`);
+    console.log(`🔍 Expanding specific variable: ${variableName} with depth ${maxDepth} ${forceFullExpansion ? '(FULL JSON)' : ''} at 2025-06-09 16:13:14`);
 
-        const result = await this.variableExpansionService.expandVariable(
-            this.delveClient.currentSession,
-            frameId,
-            variableName,
-            maxDepth
-        );
+    const result = await this.variableExpansionService.expandVariable(
+        this.delveClient.currentSession,
+        frameId,
+        variableName,
+        maxDepth,
+        forceFullExpansion
+    );
 
-        if (result.success && result.data) {
-            console.log(`✅ Successfully expanded ${variableName} in ${result.expansionTime}ms, memory: ${result.memoryUsed}`);
-            return result.data;
-        } else {
-            console.error(`❌ Failed to expand ${variableName}: ${result.error}`);
+    if (result.success && result.data) {
+        console.log(`✅ Successfully expanded ${variableName} in ${result.expansionTime}ms, memory: ${result.memoryUsed} at 2025-06-09 16:13:14`);
+        return result.data;
+    } else {
+        console.error(`❌ Failed to expand ${variableName}: ${result.error} at 2025-06-09 16:13:14`);
+        return null;
+    }
+}
+async getVariableAsJSON(variableName: string, maxDepth: number = 6): Promise<string | null> {
+    const expanded = await this.expandSpecificVariable(variableName, maxDepth, true);
+    if (expanded && expanded.metadata.fullJSONAvailable) {
+        try {
+            const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, maxDepth);
+            return JSON.stringify(fullJSON, null, 2);
+        } catch (error) {
+            console.error(`❌ Error generating JSON for ${variableName} at 2025-06-09 16:13:14:`, error);
             return null;
         }
     }
+    return null;
+}
+
 
     // Enhanced search with better filtering
     searchVariables(query: string): Variable[] {
@@ -1220,25 +1289,29 @@ ${ps.recommendations.map(r => `- ${r.type}: ${r.description} (${r.priority} prio
 `;
     }
 
-    getVariableExpansionSummary(): string {
-        const memoryUsage = this.variableExpansionService.getMemoryUsage();
-        const expandedCount = this.expandedVariables.size;
-        const successfulExpansions = Array.from(this.expandedVariables.values()).filter(r => r.success).length;
+// Update the existing method to include JSON capability information
+getVariableExpansionSummary(): string {
+    const memoryUsage = this.variableExpansionService.getMemoryUsage();
+    const expandedCount = this.expandedVariables.size;
+    const successfulExpansions = Array.from(this.expandedVariables.values()).filter(r => r.success).length;
+    const jsonCapableCount = this.context.variables.filter(v => v.metadata.rawValue && this.isValidJSON(v.metadata.rawValue)).length;
 
-        return `## 🔍 Variable Expansion Summary
+    return `## 🔍 Variable Expansion Summary
 
-**Enhanced Context Collection**: ${this.getCurrentTimestamp()}
-**User**: ${this.getCurrentUser()}
+**Enhanced Context Collection**: 2025-06-09 16:13:14
+**User**: yashwanthnandam
 **Session**: ${this.sessionId}
 
 **Expansion Configuration**:
 - Deep Expansion: ${this.variableConfig.enableDeepExpansion ? 'Enabled' : 'Disabled'}
 - Max Depth: ${this.variableConfig.maxExpansionDepth}
 - Memory Limit: ${this.variableConfig.memoryLimitMB}MB
+- JSON Support: Enabled
 
 **Expansion Results**:
 - Total Variables Processed: ${expandedCount}
 - Successful Expansions: ${successfulExpansions}
+- JSON-Capable Variables: ${jsonCapableCount}
 - Memory Usage: ${memoryUsage}
 - Complex Structures Found: ${this.context.variables.filter(v => v.metadata.isExpandable).length}
 - Variable Expansion Time: ${this.context.debugInfo.performance.variableExpansionTime || 0}ms
@@ -1248,13 +1321,27 @@ ${Array.from(this.expandedVariables.entries()).slice(0, 10).map(([name, result])
     `- ${name}: ${result.success ? '✅' : '❌'} (${result.expansionTime}ms)${result.success ? ` - ${result.memoryUsed}` : ` - ${result.error}`}`
 ).join('\n')}
 
+**Full JSON Available For**:
+${this.context.variables.filter(v => v.metadata.rawValue && this.isValidJSON(v.metadata.rawValue)).slice(0, 5).map(v => 
+    `- ${v.name} (${v.type}): ${Math.round(v.metadata.rawValue?.length / 1024 || 0)}KB JSON`
+).join('\n')}
+
 **Business-Agnostic Analysis**:
 - Application-Relevant Variables: ${this.getApplicationVariables().length}
 - Control Flow Variables: ${this.getControlFlowVariables().length}
 - Expandable Structures: ${this.getComplexVariables().length}
 - System Variables: ${this.getSystemVariables().length}
 `;
+}
+
+private isValidJSON(str: string): boolean {
+    try {
+        JSON.parse(str);
+        return true;
+    } catch {
+        return false;
     }
+}
 
     getContext(): ContextData {
         return { 
