@@ -2,7 +2,7 @@
   "name": "go-debugger-ai",
   "displayName": "Go Debugger AI",
   "description": "AI-powered Go debugging with symbolic execution and path-sensitivity analysis",
-  "version": "1.0.2",
+  "version": "0.1.2",
   "publisher": "NandamYashwanth",
   "author": {
     "name": "Yashwanth Nandam",
@@ -158,12 +158,17 @@
         },
         "contextSelector.llm.provider": {
           "type": "string",
-          "enum": ["openai", "anthropic", "azure", "custom"],
+          "enum": [
+            "openai",
+            "anthropic",
+            "azure",
+            "custom"
+          ],
           "default": "openai",
           "description": "AI provider for code analysis",
           "enumDescriptions": [
             "OpenAI GPT models",
-            "Anthropic Claude models", 
+            "Anthropic Claude models",
             "Azure OpenAI Service",
             "Custom endpoint"
           ]
@@ -175,7 +180,7 @@
           "format": "password"
         },
         "contextSelector.llm.anthropicApiKey": {
-          "type": "string", 
+          "type": "string",
           "default": "",
           "description": "Anthropic API key for AI analysis",
           "format": "password"
