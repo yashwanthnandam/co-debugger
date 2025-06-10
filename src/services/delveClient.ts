@@ -34,14 +34,14 @@ export interface DebugState {
 }
 
 export class DelveClient extends EventEmitter {
-    public currentSession: vscode.DebugSession | null = null;
+    private currentSession: vscode.DebugSession | null = null;
     private isAttached = false;
     private currentThreadId: number | null = null;
     private currentFrameId: number | null = null;
 
     constructor() {
         super();
-        console.log(`🚀 DelveClient initialized at 2025-06-09 03:05:14 by yashwanthnandam`);
+        console.log(`🚀 DelveClient initialized`);
     }
 
     attachToSession(session: vscode.DebugSession) {

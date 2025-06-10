@@ -26,13 +26,13 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('contextSelector.refreshContext', async () => {
-            console.log(`🔄 Manual refresh command triggered by yashwanthnandam at 2025-06-09 03:05:14`);
+            console.log(`🔄 Manual refresh command triggered`);
             try {
                 await contextCollector.refreshAll();
                 contextSelectorView.refresh();
                 vscode.window.showInformationMessage('✅ Context refreshed successfully');
             } catch (error) {
-                console.error(`❌ Manual refresh failed at 2025-06-09 03:05:14:`, error);
+                console.error(`❌ Manual refresh failed`, error);
                 vscode.window.showErrorMessage(`❌ Refresh failed: ${error.message}`);
             }
         }),
@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const onDebugSessionStarted = vscode.debug.onDidStartDebugSession((session) => {
         if (session.configuration.type === 'go') {
-            console.log(`🔧 Go debug session started at 2025-06-09 03:05:14 for yashwanthnandam:`, {
+            console.log(`🔧 Go debug session started`, {
                 name: session.name,
                 type: session.type,
                 configuration: session.configuration.name
@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
             contextCollector.startCollection();
             
             vscode.window.showInformationMessage(
-                `🚀 Context Selector connected to Go debugger for yashwanthnandam`,
+                `🚀 Context Selector connected to Go debugger`,
                 'Open Context View'
             ).then(selection => {
                 if (selection === 'Open Context View') {
@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
             delveClient.detachFromSession();
             contextCollector.stopCollection();
             
-            vscode.window.showInformationMessage(`🛑 Context Selector disconnected from debugger for yashwanthnandam`);
+            vscode.window.showInformationMessage(`🛑 Context Selector disconnected from debugger`);
         }
     });
 
@@ -128,11 +128,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }
 
-    console.log(`✅ Context Selector Debugger fully activated for yashwanthnandam at 2025-06-09 03:05:14`);
+    console.log(`✅ Context Selector Debugger fully activated`);
 }
 
 export function deactivate() {
-    console.log(`👋 Context Selector Debugger: Deactivated for yashwanthnandam at 2025-06-09 03:05:14`);
+    console.log(`👋 Context Selector Debugger: Deactivated`);
     
     try {
         delveClient?.dispose();

@@ -40,6 +40,7 @@ export interface Variable {
         rawValue?: string;
         expansionDepth?: number;
         memoryUsage?: string;
+        fullJSONAvailable?: boolean;
     };
 }
 
@@ -92,6 +93,11 @@ export interface VariableAnalysisConfig {
     enableDeepExpansion: boolean;
     maxExpansionDepth: number;
     memoryLimitMB: number;
+    safetyLimits: {
+        maxRecursionDepth: number;
+        emergencyStopDepth: number;
+        circularReferenceLimit: number;
+    };
 }
 
 export interface ContextData {
@@ -130,6 +136,7 @@ export interface ContextData {
             pathSensitivityTime?: number;
             pathsAnalyzed?: number;
             variableExpansionTime?: number;
+            currentDepth: number;
         };
     };
 }
@@ -181,7 +188,8 @@ export class ContextCollector extends EventEmitter {
                     variableCount: 0,
                     complexStructuresFound: 0,
                     expandedVariablesCount: 0,
-                    memoryUsage: '0 MB'
+                    memoryUsage: '0 MB',
+                    currentDepth: 6
                 }
             }
         };
@@ -192,13 +200,12 @@ export class ContextCollector extends EventEmitter {
     private getCurrentUser(): string {
         return os.userInfo().username || 'unknown-user';
     }
-
     private getCurrentTimestamp(): string {
-        return '2025-06-09 04:02:46';
+        return new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
 
     private getFormattedTime(): string {
-        return new Date().toISOString();
+        return '2025-06-10T02:25:45.000Z';
     }
 
     private generateSessionId(): string {
@@ -231,7 +238,12 @@ export class ContextCollector extends EventEmitter {
             enableTypeInference: workspaceConfig.get('enableTypeInference', true),
             enableDeepExpansion: workspaceConfig.get('enableDeepExpansion', true),
             maxExpansionDepth: workspaceConfig.get('maxExpansionDepth', 6),
-            memoryLimitMB: workspaceConfig.get('memoryLimitMB', 50)
+            memoryLimitMB: workspaceConfig.get('memoryLimitMB', 50),
+            safetyLimits: {
+                maxRecursionDepth: 10,
+                emergencyStopDepth: 15,
+                circularReferenceLimit: 100
+            }
         };
     }
 
@@ -241,6 +253,7 @@ export class ContextCollector extends EventEmitter {
             this.context.debugInfo.isConnected = true;
             this.context.debugInfo.isStopped = false;
             this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+            this.context.debugInfo.user = this.getCurrentUser();
             this.emit('collectionStarted');
         });
 
@@ -250,6 +263,7 @@ export class ContextCollector extends EventEmitter {
             this.context.debugInfo.currentThreadId = eventBody.threadId;
             this.context.debugInfo.currentFrameId = eventBody.frameId;
             this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+            this.context.debugInfo.user = this.getCurrentUser();
             this.collectCurrentContext();
         });
 
@@ -259,6 +273,7 @@ export class ContextCollector extends EventEmitter {
             this.context.debugInfo.currentThreadId = null;
             this.context.debugInfo.currentFrameId = null;
             this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+            this.context.debugInfo.user = this.getCurrentUser();
             this.clearContext();
         });
 
@@ -267,6 +282,7 @@ export class ContextCollector extends EventEmitter {
             this.context.debugInfo.isConnected = false;
             this.context.debugInfo.isStopped = false;
             this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+            this.context.debugInfo.user = this.getCurrentUser();
             this.clearContext();
             this.emit('collectionStopped');
         });
@@ -288,9 +304,11 @@ export class ContextCollector extends EventEmitter {
             variableCount: 0,
             complexStructuresFound: 0,
             expandedVariablesCount: 0,
-            memoryUsage: '0 MB'
+            memoryUsage: '0 MB',
+            currentDepth: this.variableConfig.maxExpansionDepth
         };
         this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+        this.context.debugInfo.user = this.getCurrentUser();
         
         // Clear expansion caches
         this.expandedVariables.clear();
@@ -301,13 +319,13 @@ export class ContextCollector extends EventEmitter {
 
     startCollection() {
         this.isCollecting = true;
-        console.log(`📊 Enhanced context collection enabled - using VS Code context at ${this.getCurrentTimestamp()}`);
+        console.log(`📊 Enhanced context collection enabled - using VS Code context at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
     }
 
     stopCollection() {
         this.isCollecting = false;
         this.clearContext();
-        console.log(`⏹️ Enhanced context collection disabled at ${this.getCurrentTimestamp()}`);
+        console.log(`⏹️ Enhanced context collection disabled at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
     }
 
     private async collectCurrentContext() {
@@ -317,7 +335,7 @@ export class ContextCollector extends EventEmitter {
         }
 
         try {
-            console.log(`🎯 Collecting enhanced context using VS Code's thread ${this.delveClient.getCurrentThreadId()} at ${this.getCurrentTimestamp()}`);
+            console.log(`🎯 Collecting enhanced context using VS Code's thread ${this.delveClient.getCurrentThreadId()} at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
             await this.refreshAll();
         } catch (error) {
             console.error(`❌ Error collecting current context at ${this.getCurrentTimestamp()}:`, error);
@@ -341,12 +359,14 @@ export class ContextCollector extends EventEmitter {
         const collectionStartTime = Date.now();
         this.context.debugInfo.lastCollection = collectionStartTime;
         this.context.debugInfo.timestamp = this.getCurrentTimestamp();
+        this.context.debugInfo.user = this.getCurrentUser();
         this.context.debugInfo.errors = [];
         this.context.debugInfo.currentThreadId = this.delveClient.getCurrentThreadId();
         this.context.debugInfo.currentFrameId = this.delveClient.getCurrentFrameId();
+        this.context.debugInfo.performance.currentDepth = this.variableConfig.maxExpansionDepth;
 
         try {
-            console.log(`🔄 Starting enhanced context collection with full variable expansion at ${this.getCurrentTimestamp()}`);
+            console.log(`🔄 Starting enhanced context collection with depth ${this.variableConfig.maxExpansionDepth} at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
             console.log(`📊 Configuration: Deep expansion: ${this.variableConfig.enableDeepExpansion}, Max depth: ${this.variableConfig.maxExpansionDepth}, Memory limit: ${this.variableConfig.memoryLimitMB}MB`);
             
             // Get current frame from VS Code's context
@@ -360,10 +380,10 @@ export class ContextCollector extends EventEmitter {
                 
                 console.log(`📍 Current location from VS Code context at ${this.getCurrentTimestamp()}:`, this.context.currentLocation);
                 
-                // Enhanced context collection with full variable expansion
+                // Enhanced context collection with configurable depth
                 await Promise.all([
                     this.collectFunctionCallsFromVSCode(),
-                    this.collectVariablesFromVSCodeWithFullExpansion(),
+                    this.collectVariablesFromVSCodeWithConfigurableDepth(),
                     this.collectExecutionPathsFromVSCode()
                 ]);
 
@@ -405,10 +425,11 @@ export class ContextCollector extends EventEmitter {
                     alternativePathsFound: this.context.symbolicExecution.alternativePaths.length,
                     pathSensitivityTime,
                     pathsAnalyzed: this.context.pathSensitivity.pathAnalysis.exploredPaths,
-                    variableExpansionTime: Array.from(this.expandedVariables.values()).reduce((sum, r) => sum + r.expansionTime, 0)
+                    variableExpansionTime: Array.from(this.expandedVariables.values()).reduce((sum, r) => sum + r.expansionTime, 0),
+                    currentDepth: this.variableConfig.maxExpansionDepth
                 };
                 
-                console.log(`✅ Enhanced context collection complete at ${this.getCurrentTimestamp()}:`, {
+                console.log(`✅ Enhanced context collection complete at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()}):`, {
                     functionCalls: this.context.functionCalls.length,
                     variables: this.context.variables.length,
                     expandedVariables: this.expandedVariables.size,
@@ -419,7 +440,8 @@ export class ContextCollector extends EventEmitter {
                     pathSensitivityTime: `${pathSensitivityTime}ms`,
                     currentLocation: this.context.currentLocation,
                     threadId: this.context.debugInfo.currentThreadId,
-                    frameId: this.context.debugInfo.currentFrameId
+                    frameId: this.context.debugInfo.currentFrameId,
+                    depth: this.variableConfig.maxExpansionDepth
                 });
                 
             } else {
@@ -499,7 +521,7 @@ export class ContextCollector extends EventEmitter {
         console.log(`✅ Collected ${allCalls.length} function calls from VS Code context at ${this.getCurrentTimestamp()}`);
     }
 
-    private async collectVariablesFromVSCodeWithFullExpansion() {
+    private async collectVariablesFromVSCodeWithConfigurableDepth() {
         if (!this.variableConfig.enableDeepExpansion) {
             console.log(`📝 Deep expansion disabled - using standard collection at ${this.getCurrentTimestamp()}`);
             return await this.collectBasicVariablesFromVSCode();
@@ -512,7 +534,7 @@ export class ContextCollector extends EventEmitter {
                 return;
             }
 
-            console.log(`🔍 Starting enhanced variable expansion for frame ${frameId} at ${this.getCurrentTimestamp()}`);
+            console.log(`🔍 Starting enhanced variable expansion for frame ${frameId} with depth ${this.variableConfig.maxExpansionDepth} at ${this.getCurrentTimestamp()}`);
 
             // Get basic scopes first
             const scopes = await this.delveClient.getScopes();
@@ -525,12 +547,17 @@ export class ContextCollector extends EventEmitter {
 
             const variableExpansionStartTime = Date.now();
 
-            // Expand all variables with full depth
+            // Calculate safe limits based on depth
+            const safeMaxVariables = Math.max(8, Math.min(40, Math.ceil(60 / this.variableConfig.maxExpansionDepth)));
+            
+            console.log(`📊 Expanding max ${safeMaxVariables} variables to depth ${this.variableConfig.maxExpansionDepth} at ${this.getCurrentTimestamp()}`);
+
+            // Expand all variables with configured depth
             const expansionResults = await this.variableExpansionService.expandAllVariablesInScope(
                 this.delveClient.currentSession,
                 frameId,
                 this.variableConfig.maxExpansionDepth,
-                40  // More variables for comprehensive analysis
+                safeMaxVariables
             );
 
             this.expandedVariables = new Map(Object.entries(expansionResults));
@@ -574,12 +601,13 @@ export class ContextCollector extends EventEmitter {
 
             this.context.variables = Array.from(variableMap.values());
             
-            console.log(`✅ Enhanced variable collection complete at ${this.getCurrentTimestamp()}:`, {
+            console.log(`✅ Enhanced variable collection complete at depth ${this.variableConfig.maxExpansionDepth} at ${this.getCurrentTimestamp()}:`, {
                 totalVariables: this.context.variables.length,
                 expandedVariables: this.expandedVariables.size,
                 complexStructures: complexStructureCount,
                 memoryUsage: this.variableExpansionService.getMemoryUsage(),
-                expansionTime: `${Date.now() - variableExpansionStartTime}ms`
+                expansionTime: `${Date.now() - variableExpansionStartTime}ms`,
+                depth: this.variableConfig.maxExpansionDepth
             });
             
         } catch (error) {
@@ -614,87 +642,89 @@ export class ContextCollector extends EventEmitter {
     }
 
     private convertExpandedToVariable(name: string, expanded: SimplifiedValue, result: ExpansionResult): Variable {
-    // Convert our expanded format to the Variable interface with full JSON support
-    const displayValue = this.createDisplayValueFromExpanded(expanded);
-    
-    return {
-        name,
-        value: displayValue,
-        type: expanded.originalType,
-        scope: 'Local', // Will be updated when we merge with basic variables
-        isControlFlow: this.isControlFlowVariable(name),
-        isApplicationRelevant: this.isApplicationRelevantVariable(name, displayValue),
-        changeHistory: [],
-        dependencies: this.extractDependencies(expanded),
-        metadata: {
-            isPointer: expanded.metadata.isPointer,
-            isNil: expanded.metadata.isNil,
-            memoryAddress: expanded.metadata.memoryAddress,
-            arrayLength: expanded.metadata.arrayLength,
-            objectKeyCount: expanded.metadata.objectKeyCount,
-            truncatedAt: expanded.metadata.truncatedAt,
-            isExpandable: expanded.hasMore || !!expanded.children,
-            rawValue: this.createFullJSONFromExpanded(expanded), // NEW: Store full JSON
-            expansionDepth: this.calculateExpansionDepth(expanded),
-            memoryUsage: result.memoryUsed
-        }
-    };
-}
-private createFullJSONFromExpanded(expanded: SimplifiedValue): string {
-    try {
-        if (expanded.metadata.fullJSONAvailable && expanded.children) {
-            const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, 6);
-            return JSON.stringify(fullJSON, null, 2);
-        }
+        // Convert our expanded format to the Variable interface with full JSON support
+        const displayValue = this.createDisplayValueFromExpanded(expanded);
         
-        if (expanded.children && Object.keys(expanded.children).length > 0) {
-            // Fallback: create JSON from children
-            const obj: any = {};
-            Object.entries(expanded.children).forEach(([key, value]) => {
-                try {
-                    if (value.children) {
-                        obj[key] = this.dataHandler.generateCompleteJSON(value, 0, 6);
-                    } else {
-                        obj[key] = this.parseSimpleValue(value.displayValue, value.originalType);
+        return {
+            name,
+            value: displayValue,
+            type: expanded.originalType,
+            scope: 'Local', // Will be updated when we merge with basic variables
+            isControlFlow: this.isControlFlowVariable(name),
+            isApplicationRelevant: this.isApplicationRelevantVariable(name, displayValue),
+            changeHistory: [],
+            dependencies: this.extractDependencies(expanded),
+            metadata: {
+                isPointer: expanded.metadata.isPointer,
+                isNil: expanded.metadata.isNil,
+                memoryAddress: expanded.metadata.memoryAddress,
+                arrayLength: expanded.metadata.arrayLength,
+                objectKeyCount: expanded.metadata.objectKeyCount,
+                truncatedAt: expanded.metadata.truncatedAt,
+                isExpandable: expanded.hasMore || !!expanded.children,
+                rawValue: this.createFullJSONFromExpanded(expanded),
+                expansionDepth: this.calculateExpansionDepth(expanded),
+                memoryUsage: result.memoryUsed,
+                fullJSONAvailable: expanded.metadata.fullJSONAvailable || false
+            }
+        };
+    }
+
+    // NEW: Create full JSON representation from expanded data
+    private createFullJSONFromExpanded(expanded: SimplifiedValue): string {
+        try {
+            if (expanded.metadata.fullJSONAvailable && expanded.children) {
+                const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, this.variableConfig.maxExpansionDepth);
+                return JSON.stringify(fullJSON, null, 2);
+            }
+            
+            if (expanded.children && Object.keys(expanded.children).length > 0) {
+                // Fallback: create JSON from children
+                const obj: any = {};
+                Object.entries(expanded.children).forEach(([key, value]) => {
+                    try {
+                        if (value.children) {
+                            obj[key] = this.dataHandler.generateCompleteJSON(value, 0, this.variableConfig.maxExpansionDepth);
+                        } else {
+                            obj[key] = this.parseSimpleValue(value.displayValue, value.originalType);
+                        }
+                    } catch (error) {
+                        obj[key] = value.displayValue;
                     }
-                } catch (error) {
-                    obj[key] = value.displayValue;
-                }
-            });
-            return JSON.stringify(obj, null, 2);
+                });
+                return JSON.stringify(obj, null, 2);
+            }
+            
+            return expanded.displayValue;
+        } catch (error) {
+            console.error(`❌ Error creating JSON from expanded variable at ${this.getCurrentTimestamp()}:`, error);
+            return expanded.displayValue;
         }
-        
-        return expanded.displayValue;
-    } catch (error) {
-        console.error(`❌ Error creating JSON from expanded variable at 2025-06-09 16:13:14:`, error);
-        return expanded.displayValue;
-    }
-}
-
-private parseSimpleValue(displayValue: string, type: string): any {
-    if (!displayValue || displayValue === 'nil' || displayValue === '<nil>') {
-        return null;
     }
 
-    if (displayValue.startsWith('"') && displayValue.endsWith('"')) {
-        return displayValue.slice(1, -1);
+    private parseSimpleValue(displayValue: string, type: string): any {
+        if (!displayValue || displayValue === 'nil' || displayValue === '<nil>') {
+            return null;
+        }
+
+        if (displayValue.startsWith('"') && displayValue.endsWith('"')) {
+            return displayValue.slice(1, -1);
+        }
+
+        if (displayValue === 'true' || displayValue === 'false') {
+            return displayValue === 'true';
+        }
+
+        if (/^\d+$/.test(displayValue)) {
+            return parseInt(displayValue);
+        }
+
+        if (/^\d+\.\d+$/.test(displayValue)) {
+            return parseFloat(displayValue);
+        }
+
+        return displayValue;
     }
-
-    if (displayValue === 'true' || displayValue === 'false') {
-        return displayValue === 'true';
-    }
-
-    if (/^\d+$/.test(displayValue)) {
-        return parseInt(displayValue);
-    }
-
-    if (/^\d+\.\d+$/.test(displayValue)) {
-        return parseFloat(displayValue);
-    }
-
-    return displayValue;
-}
-
 
     private extractDependencies(expanded: SimplifiedValue): string[] {
         const dependencies: string[] = [];
@@ -781,7 +811,8 @@ private parseSimpleValue(displayValue: string, type: string): any {
                             objectKeyCount: simplified.metadata.objectKeyCount,
                             truncatedAt: simplified.metadata.truncatedAt,
                             isExpandable: simplified.hasMore,
-                            rawValue: variable.value
+                            rawValue: variable.value,
+                            fullJSONAvailable: false
                         }
                     });
                 });
@@ -821,7 +852,7 @@ private parseSimpleValue(displayValue: string, type: string): any {
 
         const applicationFields = this.detectApplicationFields(params);
         const simplificationOptions: Partial<SimplificationOptions> = {
-            maxDepth: 4,
+            maxDepth: Math.min(this.variableConfig.maxExpansionDepth, 4),
             maxArrayLength: 8,
             maxStringLength: this.variableConfig.maxVariableValueLength,
             maxObjectKeys: 12,
@@ -847,7 +878,7 @@ private parseSimpleValue(displayValue: string, type: string): any {
         const typeName = this.inferSmartType(variable.name, variable.value, variable.type);
         
         const options: Partial<SimplificationOptions> = {
-            maxDepth: scopeName === 'Local' ? 5 : 3,
+            maxDepth: scopeName === 'Local' ? Math.min(this.variableConfig.maxExpansionDepth, 5) : 3,
             maxArrayLength: 10,
             maxStringLength: this.variableConfig.maxVariableValueLength,
             maxObjectKeys: 15,
@@ -1110,45 +1141,49 @@ private parseSimpleValue(displayValue: string, type: string): any {
         return hasApplicationKeyword || hasMeaningfulValue;
     }
 
-    async expandSpecificVariable(variableName: string, maxDepth: number = 6, forceFullExpansion: boolean = false): Promise<SimplifiedValue | null> {
-    const frameId = this.delveClient.getCurrentFrameId();
-    if (!frameId) {
-        console.log(`❌ No frame ID available for expanding ${variableName} at 2025-06-09 16:13:14`);
-        return null;
-    }
+    // Enhanced variable expansion for specific variables with configurable depth
+    async expandSpecificVariable(variableName: string, maxDepth?: number, forceFullExpansion: boolean = false): Promise<SimplifiedValue | null> {
+        const frameId = this.delveClient.getCurrentFrameId();
+        if (!frameId) {
+            console.log(`❌ No frame ID available for expanding ${variableName} at ${this.getCurrentTimestamp()}`);
+            return null;
+        }
 
-    console.log(`🔍 Expanding specific variable: ${variableName} with depth ${maxDepth} ${forceFullExpansion ? '(FULL JSON)' : ''} at 2025-06-09 16:13:14`);
+        const depth = maxDepth || this.variableConfig.maxExpansionDepth;
+        console.log(`🔍 Expanding specific variable: ${variableName} with depth ${depth} ${forceFullExpansion ? '(FULL JSON)' : ''} at ${this.getCurrentTimestamp()}`);
 
-    const result = await this.variableExpansionService.expandVariable(
-        this.delveClient.currentSession,
-        frameId,
-        variableName,
-        maxDepth,
-        forceFullExpansion
-    );
+        const result = await this.variableExpansionService.expandVariable(
+            this.delveClient.currentSession,
+            frameId,
+            variableName,
+            depth,
+            forceFullExpansion
+        );
 
-    if (result.success && result.data) {
-        console.log(`✅ Successfully expanded ${variableName} in ${result.expansionTime}ms, memory: ${result.memoryUsed} at 2025-06-09 16:13:14`);
-        return result.data;
-    } else {
-        console.error(`❌ Failed to expand ${variableName}: ${result.error} at 2025-06-09 16:13:14`);
-        return null;
-    }
-}
-async getVariableAsJSON(variableName: string, maxDepth: number = 6): Promise<string | null> {
-    const expanded = await this.expandSpecificVariable(variableName, maxDepth, true);
-    if (expanded && expanded.metadata.fullJSONAvailable) {
-        try {
-            const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, maxDepth);
-            return JSON.stringify(fullJSON, null, 2);
-        } catch (error) {
-            console.error(`❌ Error generating JSON for ${variableName} at 2025-06-09 16:13:14:`, error);
+        if (result.success && result.data) {
+            console.log(`✅ Successfully expanded ${variableName} in ${result.expansionTime}ms, memory: ${result.memoryUsed} at ${this.getCurrentTimestamp()}`);
+            return result.data;
+        } else {
+            console.error(`❌ Failed to expand ${variableName}: ${result.error} at ${this.getCurrentTimestamp()}`);
             return null;
         }
     }
-    return null;
-}
 
+    // NEW: Get full JSON for a specific variable with configurable depth
+    async getVariableAsJSON(variableName: string, maxDepth?: number): Promise<string | null> {
+        const depth = maxDepth || this.variableConfig.maxExpansionDepth;
+        const expanded = await this.expandSpecificVariable(variableName, depth, true);
+        if (expanded && expanded.metadata.fullJSONAvailable) {
+            try {
+                const fullJSON = this.dataHandler.generateCompleteJSON(expanded, 0, depth);
+                return JSON.stringify(fullJSON, null, 2);
+            } catch (error) {
+                console.error(`❌ Error generating JSON for ${variableName} at ${this.getCurrentTimestamp()}:`, error);
+                return null;
+            }
+        }
+        return null;
+    }
 
     // Enhanced search with better filtering
     searchVariables(query: string): Variable[] {
@@ -1191,7 +1226,7 @@ async getVariableAsJSON(variableName: string, maxDepth: number = 6): Promise<str
         }
 
         const options: Partial<SimplificationOptions> = {
-            maxDepth: 8,
+            maxDepth: this.variableConfig.maxExpansionDepth,
             maxArrayLength: 20,
             maxStringLength: 2000,
             maxObjectKeys: 30,
@@ -1212,6 +1247,10 @@ async getVariableAsJSON(variableName: string, maxDepth: number = 6): Promise<str
         
         return `## 🧠 Symbolic Execution Analysis (Enhanced Context)
 
+**Generated**: ${this.getCurrentTimestamp()}
+**User**: ${this.getCurrentUser()}
+**Session**: ${this.sessionId}
+
 **Current Execution Context:**
 - Thread ID: ${this.context.debugInfo.currentThreadId}
 - Frame ID: ${this.context.debugInfo.currentFrameId}
@@ -1219,6 +1258,7 @@ async getVariableAsJSON(variableName: string, maxDepth: number = 6): Promise<str
 - Path Probability: ${(se.currentPath.pathProbability * 100).toFixed(1)}%
 - Constraints: ${se.currentPath.pathConstraints.length} active
 - Branches Taken: ${se.currentPath.branchesTaken.length}
+- Expansion Depth: ${this.variableConfig.maxExpansionDepth}
 
 **Enhanced Variable Context:**
 - Total Variables: ${this.context.variables.length}
@@ -1257,10 +1297,15 @@ ${se.executionSummary.potentialIssues.map(issue => `- ${issue.type}: ${issue.des
         
         return `## 🛤️ Path-Sensitivity Analysis (Enhanced Context)
 
+**Generated**: ${this.getCurrentTimestamp()}
+**User**: ${this.getCurrentUser()}
+**Session**: ${this.sessionId}
+
 **Current Execution Path**: ${ps.currentPath.slice(-3).join(' → ')}
 **Paths Analyzed**: ${ps.pathAnalysis.exploredPaths} / ${ps.pathAnalysis.totalPaths} (${(ps.pathAnalysis.pathCoverage * 100).toFixed(1)}% coverage)
 **Branching Complexity**: ${ps.sensitivityMetrics.branchingComplexity.toFixed(1)}
 **High-Sensitivity Variables**: ${ps.sensitivityMetrics.highSensitivityVariables.length}
+**Expansion Depth**: ${this.variableConfig.maxExpansionDepth}
 
 **Enhanced Context:**
 - Thread: ${this.context.debugInfo.currentThreadId}
@@ -1289,17 +1334,17 @@ ${ps.recommendations.map(r => `- ${r.type}: ${r.description} (${r.priority} prio
 `;
     }
 
-// Update the existing method to include JSON capability information
-getVariableExpansionSummary(): string {
-    const memoryUsage = this.variableExpansionService.getMemoryUsage();
-    const expandedCount = this.expandedVariables.size;
-    const successfulExpansions = Array.from(this.expandedVariables.values()).filter(r => r.success).length;
-    const jsonCapableCount = this.context.variables.filter(v => v.metadata.rawValue && this.isValidJSON(v.metadata.rawValue)).length;
+    // Update the existing method to include JSON capability information
+    getVariableExpansionSummary(): string {
+        const memoryUsage = this.variableExpansionService.getMemoryUsage();
+        const expandedCount = this.expandedVariables.size;
+        const successfulExpansions = Array.from(this.expandedVariables.values()).filter(r => r.success).length;
+        const jsonCapableCount = this.context.variables.filter(v => v.metadata.rawValue && this.isValidJSON(v.metadata.rawValue)).length;
 
-    return `## 🔍 Variable Expansion Summary
+        return `## 🔍 Variable Expansion Summary
 
-**Enhanced Context Collection**: 2025-06-09 16:13:14
-**User**: yashwanthnandam
+**Enhanced Context Collection**: ${this.getCurrentTimestamp()}
+**User**: ${this.getCurrentUser()}
 **Session**: ${this.sessionId}
 
 **Expansion Configuration**:
@@ -1307,6 +1352,7 @@ getVariableExpansionSummary(): string {
 - Max Depth: ${this.variableConfig.maxExpansionDepth}
 - Memory Limit: ${this.variableConfig.memoryLimitMB}MB
 - JSON Support: Enabled
+- Safety Limits: Max Recursion ${this.variableConfig.safetyLimits.maxRecursionDepth}, Emergency Stop ${this.variableConfig.safetyLimits.emergencyStopDepth}
 
 **Expansion Results**:
 - Total Variables Processed: ${expandedCount}
@@ -1332,16 +1378,16 @@ ${this.context.variables.filter(v => v.metadata.rawValue && this.isValidJSON(v.m
 - Expandable Structures: ${this.getComplexVariables().length}
 - System Variables: ${this.getSystemVariables().length}
 `;
-}
-
-private isValidJSON(str: string): boolean {
-    try {
-        JSON.parse(str);
-        return true;
-    } catch {
-        return false;
     }
-}
+
+    private isValidJSON(str: string): boolean {
+        try {
+            JSON.parse(str);
+            return true;
+        } catch {
+            return false;
+        }
+    }
 
     getContext(): ContextData {
         return { 
@@ -1351,7 +1397,11 @@ private isValidJSON(str: string): boolean {
                 timestamp: this.getCurrentTimestamp(),
                 user: this.getCurrentUser(),
                 currentThreadId: this.delveClient.getCurrentThreadId(),
-                currentFrameId: this.delveClient.getCurrentFrameId()
+                currentFrameId: this.delveClient.getCurrentFrameId(),
+                performance: {
+                    ...this.context.debugInfo.performance,
+                    currentDepth: this.variableConfig.maxExpansionDepth
+                }
             }
         };
     }
@@ -1361,13 +1411,15 @@ private isValidJSON(str: string): boolean {
             sessionId: this.sessionId,
             user: this.getCurrentUser(),
             timestamp: this.getCurrentTimestamp(),
+            currentDepth: this.variableConfig.maxExpansionDepth,
             ...this.context.debugInfo.performance,
             expandedVariablesDetails: Array.from(this.expandedVariables.entries()).map(([name, result]) => ({
                 name,
                 success: result.success,
                 expansionTime: result.expansionTime,
                 memoryUsed: result.memoryUsed,
-                error: result.error
+                error: result.error,
+                depth: this.variableConfig.maxExpansionDepth
             }))
         };
     }
@@ -1376,12 +1428,15 @@ private isValidJSON(str: string): boolean {
         return { ...this.variableConfig };
     }
 
-    updateVariableConfig(newConfig: Partial<VariableAnalysisConfig>): void {
-        this.variableConfig = { ...this.variableConfig, ...newConfig };
-        console.log(`🔧 ContextCollector: Variable configuration updated at ${this.getCurrentTimestamp()}`);
-    }
+updateVariableConfig(newConfig: Partial<VariableAnalysisConfig>): void {
+    this.variableConfig = { ...this.variableConfig, ...newConfig };
+    console.log(`🔧 Variable configuration updated at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
+}
 
+    // Enhanced dispose with depth tracking cleanup
     dispose() {
+        console.log(`🧹 Disposing ContextCollector at, Depth: ${this.variableConfig.maxExpansionDepth})`);
+        
         this.stopCollection();
         this.dataHandler = null as any;
         this.variableExpansionService?.clearHistory();
@@ -1389,5 +1444,8 @@ private isValidJSON(str: string): boolean {
         this.symbolicExecutor?.dispose();
         this.pathSensitivityAnalyzer?.dispose();
         this.removeAllListeners();
+        
+        // Log final performance stats
+        console.log(`📊 Final Stats - Variables: ${this.context.variables.length}, Depth: ${this.variableConfig.maxExpansionDepth}, Memory: ${this.context.debugInfo.performance.memoryUsage}`);
     }
 }
