@@ -2,7 +2,7 @@
   "name": "go-debugger-ai",
   "displayName": "Go Debugger AI",
   "description": "AI-powered Go debugging with symbolic execution and path-sensitivity analysis",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "publisher": "NandamYashwanth",
   "author": {
     "name": "Yashwanth Nandam",
@@ -69,6 +69,11 @@
         "title": "Export Debug Analysis",
         "category": "Go Debug",
         "icon": "$(export)"
+      },
+            {
+        "command": "contextSelector.showExecutionGraph",
+        "title": "Show Execution Path Graph",
+        "category": "Go Debugger AI"
       },
       {
         "command": "contextSelector.checkStopped",

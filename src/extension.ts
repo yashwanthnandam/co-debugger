@@ -3,11 +3,15 @@ import { ContextSelectorView } from './views/contextSelectorView';
 import { ContextCollector } from './services/contextCollector';
 import { DelveClient } from './services/delveClient';
 import { LLMService } from './services/llmService';
+import { ExecutionPathGraphService } from './services/executionPathGraphService';
+import { ExecutionPathGraphView } from './views/executionPathGraphView';
 
 let contextCollector: ContextCollector;
 let delveClient: DelveClient;
 let llmService: LLMService;
 let contextSelectorView: ContextSelectorView;
+let executionPathGraphService: ExecutionPathGraphService;
+let executionPathGraphView: ExecutionPathGraphView;
 
 export function activate(context: vscode.ExtensionContext) {
     console.log(`🚀 Context Selector Debugger: Activated `);
@@ -17,12 +21,21 @@ export function activate(context: vscode.ExtensionContext) {
     llmService = new LLMService();
     contextCollector = new ContextCollector(delveClient);
     contextSelectorView = new ContextSelectorView(contextCollector, llmService, delveClient);
+    
+    // Initialize execution path graph services
+    executionPathGraphService = new ExecutionPathGraphService(contextCollector, delveClient);
+    executionPathGraphView = new ExecutionPathGraphView(executionPathGraphService, context);
 
     // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('contextSelector.openView', () => {
-            console.log(`📱 Opening Context Selector view at 2025-06-09 03:05:14`);
+            console.log(`📱 Opening Context Selector view at 2025-06-12 01:41:55`);
             contextSelectorView.show();
+        }),
+
+        vscode.commands.registerCommand('contextSelector.showExecutionGraph', () => {
+            console.log(`📊 Opening Execution Path Graph at 2025-06-12 01:41:55`);
+            executionPathGraphView.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.refreshContext', async () => {
@@ -35,27 +48,20 @@ export function activate(context: vscode.ExtensionContext) {
                 console.error(`❌ Manual refresh failed`, error);
                 vscode.window.showErrorMessage(`❌ Refresh failed: ${error.message}`);
             }
-        }),
-
-        vscode.commands.registerCommand('contextSelector.exportContext', () => {
-            console.log(`📋 Exporting context`);
-            contextSelectorView.exportContext();
         })
     );
 
-    // Correct VS Code Debug Event Handlers
+    // VS Code Debug Event Handlers
     const onStackItemChanged = vscode.debug.onDidChangeActiveStackItem((stackItem) => {
         if (stackItem && stackItem.session.configuration.type === 'go') {
-            console.log(`🎯 VS Code active stack item changed at 2025-06-09 03:05:14:`, {
+            console.log(`🎯 VS Code active stack item changed at 2025-06-12 01:41:55:`, {
                 sessionName: stackItem.session.name,
                 threadId: stackItem.threadId
             });
             
-            // This means debugger stopped and VS Code has selected a thread/stack item
             delveClient.notifyStoppedFromVSCode();
         } else if (!stackItem) {
-            console.log(`🔄 VS Code active stack item cleared at 2025-06-09 03:05:14`);
-            // This typically means debugger continued
+            console.log(`🔄 VS Code active stack item cleared at 2025-06-12 01:41:55`);
             delveClient.notifyContinuedFromVSCode();
         }
     });
@@ -73,10 +79,13 @@ export function activate(context: vscode.ExtensionContext) {
             
             vscode.window.showInformationMessage(
                 `🚀 Context Selector connected to Go debugger`,
-                'Open Context View'
+                'Open Context View',
+                'Show Execution Graph'
             ).then(selection => {
                 if (selection === 'Open Context View') {
                     vscode.commands.executeCommand('contextSelector.openView');
+                } else if (selection === 'Show Execution Graph') {
+                    vscode.commands.executeCommand('contextSelector.showExecutionGraph');
                 }
             });
         }
@@ -84,7 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const onDebugSessionTerminated = vscode.debug.onDidTerminateDebugSession((session) => {
         if (session.configuration.type === 'go') {
-            console.log(`🔌 Go debug session terminated at 2025-06-09 03:05:14:`, session.name);
+            console.log(`🔌 Go debug session terminated at 2025-06-12 01:41:55:`, session.name);
             delveClient.detachFromSession();
             contextCollector.stopCollection();
             
@@ -94,11 +103,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     const onDebugSessionChanged = vscode.debug.onDidChangeActiveDebugSession((session) => {
         if (session && session.configuration.type === 'go') {
-            console.log(`🔄 Active Go debug session changed at 2025-06-09 03:05:14:`, session.name);
+            console.log(`🔄 Active Go debug session changed at 2025-06-12 01:41:55:`, session.name);
             delveClient.attachToSession(session);
             contextCollector.startCollection();
         } else if (!session) {
-            console.log(`🔌 No active debug session at 2025-06-09 03:05:14`);
+            console.log(`🔌 No active debug session at 2025-06-12 01:41:55`);
         }
     });
 
@@ -115,12 +124,12 @@ export function activate(context: vscode.ExtensionContext) {
     const activeStackItem = vscode.debug.activeStackItem;
     
     if (activeSession && activeSession.configuration.type === 'go') {
-        console.log(`🔍 Found existing Go debug session at 2025-06-09 03:05:14:`, activeSession.name);
+        console.log(`🔍 Found existing Go debug session at 2025-06-12 01:41:55:`, activeSession.name);
         delveClient.attachToSession(activeSession);
         contextCollector.startCollection();
         
         if (activeStackItem) {
-            console.log(`🎯 Found existing active stack item at 2025-06-09 03:05:14:`, {
+            console.log(`🎯 Found existing active stack item at 2025-06-12 01:41:55:`, {
                 sessionName: activeStackItem.session.name,
                 threadId: activeStackItem.threadId
             });
@@ -128,7 +137,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }
 
-    console.log(`✅ Context Selector Debugger fully activated`);
+    console.log(`✅ Context Selector Debugger fully activated with Execution Path Graph`);
 }
 
 export function deactivate() {
@@ -137,8 +146,10 @@ export function deactivate() {
     try {
         delveClient?.dispose();
         contextCollector?.dispose();
-        console.log(`✅ All resources disposed successfully at 2025-06-09 03:05:14`);
+        executionPathGraphService?.dispose();
+        executionPathGraphView?.dispose();
+        console.log(`✅ All resources disposed successfully at 2025-06-12 01:41:55`);
     } catch (error) {
-        console.error(`❌ Error during deactivation at 2025-06-09 03:05:14:`, error);
+        console.error(`❌ Error during deactivation at 2025-06-12 01:41:55:`, error);
     }
 }
