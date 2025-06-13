@@ -336,6 +336,7 @@ private async searchForRealMethod(methodName: string, line?: number): Promise<vo
     );
 }
 
+
     private showNodeInformation(node: PathNode): void {
         const info = [
             `**Function**: ${node.functionName}`,
@@ -628,7 +629,7 @@ private async searchForRealMethod(methodName: string, line?: number): Promise<vo
         <div class="title">
             🔄 Execution Path Graph
             <span style="font-size: 11px; font-weight: normal; color: var(--vscode-descriptionForeground);">
-                Updated: ${new Date(graph.timestamp).toLocaleTimeString()} | User: yashwanthnandam
+                Updated: ${new Date(graph.timestamp).toLocaleTimeString()} 
             </span>
         </div>
         
@@ -715,7 +716,7 @@ private async searchForRealMethod(methodName: string, line?: number): Promise<vo
                 return;
             }
             
-            console.log('🚀 Initializing graph at 2025-06-12 03:38:04 for user: yashwanthnandam');
+            console.log('🚀 Initializing graph at 2025-06-12 03:38:04');
             
             const container = document.getElementById('network');
             if (!container) {
@@ -962,7 +963,6 @@ private async searchForRealMethod(methodName: string, line?: number): Promise<vo
             }, 100);
         });
         
-        console.log('📊 Graph script loaded at 2025-06-12 03:38:04 for user: yashwanthnandam');
     </script>
 </body>
 </html>`;

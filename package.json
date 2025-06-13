@@ -1,12 +1,12 @@
 {
   "name": "go-debugger-ai",
-  "displayName": "Go Debugger AI",
-  "description": "AI-powered Go debugging with symbolic execution and path-sensitivity analysis",
-  "version": "1.0.4",
+  "displayName": "Universal Debugger AI",
+  "description": "AI-powered multi-language debugging with symbolic execution and path-sensitivity analysis",
+  "version": "2.0.0",
   "publisher": "NandamYashwanth",
   "author": {
     "name": "Yashwanth Nandam",
-    "email": "yesnandam@example.com"
+    "email": "yesnandam@gmail.com"
   },
   "license": "MIT",
   "repository": {
@@ -28,13 +28,17 @@
   ],
   "keywords": [
     "go",
-    "golang",
+    "python",
+    "javascript",
+    "typescript",
     "debugger",
     "ai",
     "debugging",
     "symbolic execution",
     "path sensitivity",
     "context analysis",
+    "multi-language",
+    "universal",
     "delve",
     "llm",
     "chatgpt",
@@ -47,7 +51,15 @@
   "icon": "assets/icon.png",
   "activationEvents": [
     "onDebugSessionType:go",
-    "onLanguage:go"
+    "onDebugSessionType:python",
+    "onDebugSessionType:debugpy",
+    "onDebugSessionType:node",
+    "onDebugSessionType:chrome",
+    "onDebugSessionType:typescript",
+    "onLanguage:go",
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -55,30 +67,30 @@
       {
         "command": "contextSelector.openView",
         "title": "Open Context Analyzer",
-        "category": "Go Debug",
+        "category": "Universal Debug",
         "icon": "$(graph-line)"
       },
       {
         "command": "contextSelector.refreshContext",
         "title": "Refresh Debug Context",
-        "category": "Go Debug",
+        "category": "Universal Debug",
         "icon": "$(refresh)"
       },
       {
         "command": "contextSelector.exportContext",
         "title": "Export Debug Analysis",
-        "category": "Go Debug",
+        "category": "Universal Debug",
         "icon": "$(export)"
       },
-            {
+      {
         "command": "contextSelector.showExecutionGraph",
         "title": "Show Execution Path Graph",
-        "category": "Go Debugger AI"
+        "category": "Universal Debug"
       },
       {
         "command": "contextSelector.checkStopped",
         "title": "Check Debugger Status",
-        "category": "Go Debug",
+        "category": "Universal Debug",
         "icon": "$(debug-alt)"
       }
     ],
@@ -86,21 +98,21 @@
       "commandPalette": [
         {
           "command": "contextSelector.openView",
-          "when": "debugType == go || resourceExtname == .go"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts"
         },
         {
           "command": "contextSelector.refreshContext",
-          "when": "debugType == go"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript"
         },
         {
           "command": "contextSelector.exportContext",
-          "when": "debugType == go"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript"
         }
       ],
       "debug/toolbar": [
         {
           "command": "contextSelector.openView",
-          "when": "debugType == go",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript",
           "group": "navigation@1"
         }
       ]
@@ -108,25 +120,35 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "goDebugAnalyzer",
-          "title": "Go Debug Analyzer",
+          "id": "universalDebugAnalyzer",
+          "title": "Universal Debug Analyzer",
           "icon": "assets/icon.png"
         }
       ]
     },
     "views": {
-      "goDebugAnalyzer": [
+      "universalDebugAnalyzer": [
         {
           "id": "contextSelectorView",
           "name": "Debug Context",
-          "when": "debugType == go || resourceExtname == .go",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts",
           "icon": "assets/icon.png"
         }
       ]
     },
     "configuration": {
-      "title": "Go Debug Context Analyzer",
+      "title": "Universal Debug Context Analyzer",
       "properties": {
+        "universalDebugger.multiLanguage.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable multi-language debugging support"
+        },
+        "universalDebugger.multiLanguage.autoDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect programming language from debug session"
+        },
         "goDebugger.businessLogic.enableDetection": {
           "type": "boolean",
           "default": true,
@@ -221,7 +243,8 @@
     "lint": "echo \"No linting configured\" && exit 0"
   },
   "dependencies": {
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "glob": "^8.0.3"
   },
   "devDependencies": {
     "@types/node": "^16.18.126",

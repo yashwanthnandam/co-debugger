@@ -54,7 +54,7 @@ export interface RecursionContext {
 }
 
 export class DataStructureHandler {
-    private defaultOptions: SimplificationOptions = {
+    protected defaultOptions: SimplificationOptions = {
         maxDepth: 6,
         maxArrayLength: 50,
         maxStringLength: 1000,
@@ -74,8 +74,8 @@ export class DataStructureHandler {
         forceFullExpansion: false
     };
 
-    private expansionCache = new Map<string, SimplifiedValue>();
-    private lazyExpansionRequests = new Map<string, VariableExpansionRequest>();
+    protected expansionCache = new Map<string, SimplifiedValue>();
+    protected lazyExpansionRequests = new Map<string, VariableExpansionRequest>();
 
     /**
  * FIXED: Main entry point with emergency safety
@@ -134,7 +134,7 @@ simplifyValue(
   /**
  * FIXED: Recursive core function with proper depth enforcement
  */
-private recursivelySimplify(
+protected recursivelySimplify(
     rawValue: string,
     typeName: string,
     context: RecursionContext,
@@ -214,13 +214,13 @@ private recursivelySimplify(
 /**
  * FIXED: Create unique signature for circular detection
  */
-private createValueSignature(rawValue: string, typeName: string, depth: number): string {
+protected createValueSignature(rawValue: string, typeName: string, depth: number): string {
     // Create a unique signature that includes type, value hash, and reasonable depth
     const valueHash = this.simpleHash(rawValue.substring(0, 100));
     return `${typeName}:${valueHash}:${Math.floor(depth / 10)}`; // Group by depth ranges
 }
 
-private simpleHash(str: string): string {
+protected simpleHash(str: string): string {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
@@ -233,7 +233,7 @@ private simpleHash(str: string): string {
 /**
  * FIXED: Handle pointer dereferencing with strict depth control
  */
-private handlePointerDereferencing(
+protected handlePointerDereferencing(
     rawValue: string,
     typeName: string,
     context: RecursionContext,
@@ -282,7 +282,7 @@ private handlePointerDereferencing(
 /**
  * FIXED: Handle collections with strict limits
  */
-private handleCollectionRecursively(
+protected handleCollectionRecursively(
     rawValue: string,
     typeName: string,
     context: RecursionContext,
@@ -353,7 +353,7 @@ private handleCollectionRecursively(
 /**
  * FIXED: Handle structs with strict limits
  */
-private handleStructRecursively(
+protected handleStructRecursively(
     rawValue: string,
     typeName: string,
     context: RecursionContext,
@@ -424,7 +424,7 @@ private handleStructRecursively(
 /**
  * FIXED: Deep expand with emergency stops
  */
-private async deepExpandVariable(
+protected async deepExpandVariable(
     session: any,
     variable: any,
     path: string[],
@@ -513,7 +513,7 @@ private async deepExpandVariable(
     /**
      * Parse Delve's debugging format: <*Type>(0xAddress) or <Type> (length: X, cap: Y)
      */
-    private parseDelveFormat(rawValue: string, typeName: string): any {
+    protected parseDelveFormat(rawValue: string, typeName: string): any {
         // Pattern 1: <*Type>(0xAddress) - Pointer with address
         const pointerMatch = rawValue.match(/^<(\*?[^>]+)>\(([^)]+)\)$/);
         if (pointerMatch) {
@@ -548,7 +548,7 @@ private async deepExpandVariable(
     /**
      * Handle Delve format with proper addressing
      */
-    private handleDelveFormat(
+    protected handleDelveFormat(
         delveInfo: any,
         context: RecursionContext,
         options: SimplificationOptions
@@ -624,7 +624,7 @@ private async deepExpandVariable(
     /**
      * Handle JSON with recursive parsing
      */
-    private handleJSONRecursively(
+    protected handleJSONRecursively(
         rawValue: string,
         typeName: string,
         context: RecursionContext,
@@ -656,7 +656,7 @@ private async deepExpandVariable(
     /**
      * Handle primitive types (terminal case)
      */
-    private handlePrimitive(
+    protected handlePrimitive(
         rawValue: string,
         typeName: string,
         options: SimplificationOptions
@@ -776,7 +776,7 @@ private async deepExpandVariable(
         return this.parseDisplayValueToJSON(simplified.displayValue, simplified.originalType);
     }
 
-    private parseDisplayValueToJSON(displayValue: string, type: string): any {
+    protected parseDisplayValueToJSON(displayValue: string, type: string): any {
         if (!displayValue || displayValue === 'nil' || displayValue === '<nil>') {
             return null;
         }
@@ -822,13 +822,13 @@ private async deepExpandVariable(
     }
 
     // **UTILITY METHODS**
-    private isPointerSyntax(rawValue: string, typeName: string): boolean {
+    protected isPointerSyntax(rawValue: string, typeName: string): boolean {
         return (typeName.startsWith('*') && !rawValue.match(/^<[^>]+>\([^)]+\)$/)) ||
                rawValue.includes('*{') ||
                (rawValue.includes('0x') && !rawValue.match(/^<[^>]+>\([^)]+\)$/));
     }
 
-    private extractPointerValue(rawValue: string): string {
+    protected extractPointerValue(rawValue: string): string {
         const match = rawValue.match(/\*\w+\s*(\{.*\})/s);
         if (match) return match[1];
         
@@ -838,7 +838,7 @@ private async deepExpandVariable(
         return rawValue;
     }
 
-    private isPrimitiveType(typeName: string): boolean {
+    protected isPrimitiveType(typeName: string): boolean {
         const primitives = [
             'string', 'int', 'int8', 'int16', 'int32', 'int64',
             'uint', 'uint8', 'uint16', 'uint32', 'uint64',
@@ -848,7 +848,7 @@ private async deepExpandVariable(
         return primitives.some(p => typeName.includes(p));
     }
 
-    private isCollectionType(rawValue: string, typeName: string): boolean {
+    protected isCollectionType(rawValue: string, typeName: string): boolean {
         return (
             typeName.includes('[]') || 
             typeName.includes('map[') ||
@@ -860,7 +860,7 @@ private async deepExpandVariable(
         );
     }
 
-    private isStructuredType(rawValue: string, typeName: string): boolean {
+    protected isStructuredType(rawValue: string, typeName: string): boolean {
         return (
             (rawValue.includes('{') && rawValue.includes('}')) ||
             typeName.includes('struct') ||
@@ -868,18 +868,18 @@ private async deepExpandVariable(
         );
     }
 
-    private isPossibleJSON(rawValue: string): boolean {
+    protected isPossibleJSON(rawValue: string): boolean {
         const trimmed = rawValue.trim();
         return (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
                (trimmed.startsWith('[') && trimmed.endsWith(']'));
     }
 
-    private isNilValue(rawValue: string): boolean {
+    protected isNilValue(rawValue: string): boolean {
         const nilPatterns = ['nil', 'null', '<nil>', 'undefined'];
         return nilPatterns.some(pattern => rawValue.trim() === pattern);
     }
 
-    private parseStructFields(rawValue: string): Record<string, string> {
+    protected parseStructFields(rawValue: string): Record<string, string> {
         const fields: Record<string, string> = {};
         
         let content = rawValue.trim();
@@ -929,7 +929,7 @@ private async deepExpandVariable(
         return fields;
     }
 
-    private parseArrayElements(rawValue: string): string[] {
+    protected parseArrayElements(rawValue: string): string[] {
         let content = rawValue;
         content = content.replace(/len:\s*\d+,?\s*/g, '');
         content = content.replace(/cap:\s*\d+,?\s*/g, '');
@@ -961,7 +961,7 @@ private async deepExpandVariable(
         return elements;
     }
 
-    private sortChildrenByImportance(variables: any[]): any[] {
+    protected sortChildrenByImportance(variables: any[]): any[] {
         return variables.sort((a, b) => {
             const aScore = this.calculateImportanceScore(a.name, a.value);
             const bScore = this.calculateImportanceScore(b.name, b.value);
@@ -969,7 +969,7 @@ private async deepExpandVariable(
         });
     }
 
-    private calculateImportanceScore(name: string, value: string): number {
+    protected calculateImportanceScore(name: string, value: string): number {
         let score = 0;
         const nameLower = name.toLowerCase();
         
@@ -984,7 +984,7 @@ private async deepExpandVariable(
         ];
         
         const lowImportancePatterns = [
-            'internal', 'private', 'temp', 'tmp', 'cache', 'buffer',
+            'internal', 'protected', 'temp', 'tmp', 'cache', 'buffer',
             'mutex', 'lock', 'sync', 'once', 'pool'
         ];
         
@@ -999,7 +999,7 @@ private async deepExpandVariable(
         return score;
     }
 
-    private prioritizeFields(
+    protected prioritizeFields(
         fields: Record<string, string>,
         businessFields: string[]
     ): Record<string, string> {
@@ -1030,13 +1030,13 @@ private async deepExpandVariable(
         return prioritized;
     }
 
-    private createStructSummary(typeName: string, fields: string[], hasMore: boolean): string {
+    protected createStructSummary(typeName: string, fields: string[], hasMore: boolean): string {
         const fieldList = fields.slice(0, 3).join(', ');
         const summary = `${typeName} {${fieldList}${fields.length > 3 ? '...' : ''}}`;
         return hasMore ? `${summary} (${fields.length} fields shown)` : summary;
     }
 
-    private inferFieldType(fieldName: string, value: string): string {
+    protected inferFieldType(fieldName: string, value: string): string {
         if (value === 'nil' || value === 'null') return 'nil';
         if (value === 'true' || value === 'false') return 'bool';
         if (/^\d+$/.test(value)) return 'int';
@@ -1048,13 +1048,13 @@ private async deepExpandVariable(
         return 'interface{}';
     }
 
-    private inferElementType(element: string, containerType: string): string {
+    protected inferElementType(element: string, containerType: string): string {
         const match = containerType.match(/\[\](.+)/);
         if (match) return match[1];
         return this.inferFieldType('', element);
     }
 
-    private createSimpleValue(
+    protected createSimpleValue(
         displayValue: string,
         typeName: string,
         metadata: Partial<SimplifiedValue['metadata']> = {}
@@ -1074,7 +1074,7 @@ private async deepExpandVariable(
         };
     }
 
-    private createTruncatedValue(
+    protected createTruncatedValue(
         displayValue: string,
         typeName: string,
         reason: string
@@ -1094,7 +1094,7 @@ private async deepExpandVariable(
         };
     }
 
-    private estimateSize(value: string): number {
+    protected estimateSize(value: string): number {
         if (!value) return 0;
         let size = value.length * 2;
         if (value.includes('{') || value.includes('[')) size *= 1.5;

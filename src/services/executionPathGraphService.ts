@@ -54,11 +54,10 @@ export class ExecutionPathGraphService extends EventEmitter {
     }
 
     private getCurrentUser(): string {
-        return os.userInfo().username || 'yashwanthnandam';
+        return os.userInfo().username || 'unknown-user';
     }
-
     private getCurrentTimestamp(): string {
-        return '2025-06-12 02:15:38';
+        return new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
 
     private getFormattedTime(): string {
