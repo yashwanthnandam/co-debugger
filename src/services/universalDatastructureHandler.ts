@@ -1,13 +1,13 @@
 import { DataStructureHandler, SimplificationOptions, SimplifiedValue } from './dataStructureHandler';
 import { LanguageHandler } from '../languages/languageHandler';
 
-export class UniversalDataStructureHandler extends DataStructureHandler {
+export class CoDataStructureHandler extends DataStructureHandler {
     private languageHandler: LanguageHandler;
 
     constructor(languageHandler: LanguageHandler) {
         super();
         this.languageHandler = languageHandler;
-        console.log(`🌍 Universal Data Structure Handler initialized for ${languageHandler.language} at 2025-06-13 04:11:03`);
+        console.log(`🌍 Co Data Structure Handler initialized for ${languageHandler.language} at 2025-06-13 04:11:03`);
     }
 
     simplifyValue(

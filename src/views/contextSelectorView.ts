@@ -68,7 +68,7 @@ export class ContextSelectorView {
         if (!this.view) {
             this.view = vscode.window.createWebviewPanel(
                 'contextSelector.view',
-                `Go Debug Context`,
+                `Co Debug Context`,
                 vscode.ViewColumn.One,
                 { enableScripts: true, retainContextWhenHidden: true }
             );
@@ -103,17 +103,15 @@ export class ContextSelectorView {
         const context = this.contextCollector.getContext();
         const sections: string[] = [];
 
-        // Enhanced Debug Status
-        sections.push(`## Debug Status (Enhanced Context)
-User: ${this.getCurrentUser()} | Time: ${this.getCurrentTimestamp()}
+        // Clean Debug Status (no user/timestamp metadata)
+        sections.push(`## Debug Status
 Connected: ${context.debugInfo.isConnected ? 'YES' : 'NO'}
 Stopped: ${context.debugInfo.isStopped ? 'YES - At breakpoint' : 'NO - Running'}
-Thread: ${context.debugInfo.currentThreadId || 'None'} | Frame: ${context.debugInfo.currentFrameId || 'None'}
 Location: ${context.currentLocation ? 
     `${context.currentLocation.function.split('.').pop()} (${context.currentLocation.file.split('/').pop()}:${context.currentLocation.line})` : 
     'None'}
 
-Performance Metrics:
+Performance:
 - Collection: ${context.debugInfo.performance.collectionTime}ms
 - Variable Expansion: ${context.debugInfo.performance.variableExpansionTime || 0}ms  
 - Memory Usage: ${context.debugInfo.performance.memoryUsage}
@@ -121,20 +119,19 @@ Performance Metrics:
 - Complex Structures: ${context.debugInfo.performance.complexStructuresFound}
 - Expansion Depth: ${this.currentSelection.variables.expansionDepth}
 
-Session: ${context.debugInfo.sessionId}
-Errors: ${context.debugInfo.errors.length > 0 ? context.debugInfo.errors.join(', ') : 'None'}
+${context.debugInfo.errors.length > 0 ? `Errors: ${context.debugInfo.errors.join(', ')}` : 'No errors'}
 `);
 
         if (!context.debugInfo.isStopped) {
             sections.push(`## Set Breakpoint to Analyze
-1. Set breakpoint in your Go code
+1. Set breakpoint in your code
 2. Trigger execution to hit the breakpoint  
-3. Enhanced context will be automatically collected with full variable expansion to depth ${this.currentSelection.variables.expansionDepth}
+3. Context will be automatically collected with variable expansion to depth ${this.currentSelection.variables.expansionDepth}
 `);
             return sections.join('\n');
         }
 
-        // Enhanced Function Calls
+        // Function Calls (clean)
         if (this.currentSelection.functionCalls.includeRuntime && context.functionCalls.length > 0) {
             sections.push('## Function Calls\n');
             context.functionCalls.slice(0, 5).forEach((call, index) => {
@@ -152,18 +149,18 @@ Errors: ${context.debugInfo.errors.length > 0 ? context.debugInfo.errors.join(',
             });
         }
 
-        // Enhanced Variables with Full JSON Expansion
+        // Variables (clean)
         if (context.variables.length > 0) {
             const vars = this.currentSelection.variables.showApplicationOnly ? 
                 this.contextCollector.getApplicationVariables() : context.variables;
             
             sections.push(`## Variables (${vars.length} total) - Depth ${this.currentSelection.variables.expansionDepth}\n`);
             vars.slice(0, 8).forEach(variable => {
-                sections.push(this.formatEnhancedVariableWithFullJSON(variable));
+                sections.push(this.formatCleanVariable(variable));
             });
         }
 
-        // Enhanced Analysis Summary with comprehensive details
+        // Analysis sections (clean)
         if (this.currentSelection.analysis.includeSymbolicExecution && context.symbolicExecution) {
             sections.push('\n## Symbolic Execution Analysis\n');
             const se = context.symbolicExecution;
@@ -222,25 +219,12 @@ Errors: ${context.debugInfo.errors.length > 0 ? context.debugInfo.errors.join(',
                 });
             }
             
-            if (ps.executionTree.branchPoints.length > 0) {
-                sections.push(`\nBranch Points (Top 5):`);
-                ps.executionTree.branchPoints.slice(0, 5).forEach((branch, i) => {
-                    sections.push(`${i + 1}. ${branch.branchType}: ${branch.condition} (${(branch.probability * 100).toFixed(1)}% probability)`);
-                });
-            }
-            
             if (ps.pathAnalysis.criticalPaths.length > 0) {
                 sections.push(`\nCritical Paths (Top 5):`);
                 ps.pathAnalysis.criticalPaths.slice(0, 5).forEach((path, i) => {
                     sections.push(`${i + 1}. ${path.description} (${path.riskLevel} risk)`);
                     if (path.keyVariables && path.keyVariables.length > 0) {
                         sections.push(`   Variables: ${path.keyVariables.slice(0, 3).join(', ')}`);
-                    }
-                    if (path.potentialIssues && path.potentialIssues.length > 0) {
-                        sections.push(`   Issues: ${path.potentialIssues.slice(0, 2).join(', ')}`);
-                    }
-                    if (path.testSuggestions && path.testSuggestions.length > 0) {
-                        sections.push(`   Test: ${path.testSuggestions[0]}`);
                     }
                 });
             }
@@ -257,7 +241,7 @@ Errors: ${context.debugInfo.errors.length > 0 ? context.debugInfo.errors.join(',
         return sections.join('\n');
     }
 
-    private formatEnhancedVariableWithFullJSON(variable: Variable): string {
+    private formatCleanVariable(variable: Variable): string {
         const badges = [];
         if (variable.isApplicationRelevant) badges.push('APP');
         if (variable.isControlFlow) badges.push('CTRL');
@@ -279,19 +263,17 @@ Errors: ${context.debugInfo.errors.length > 0 ? context.debugInfo.errors.join(',
         const metadataStr = metadata.length > 0 ? ` | ${metadata.join(' | ')}` : '';
         
         if (this.currentSelection.variables.showAsJSON) {
-            // Get the full expanded JSON structure
             const fullJSON = this.getFullExpandedJSON(variable);
             
             if (fullJSON && fullJSON.trim() !== '{}') {
                 return `### ${variable.name} [${badges.join(',')}]
 Type: ${variable.type} | Scope: ${variable.scope}${metadataStr}
 
-Full JSON Structure (Depth ${this.currentSelection.variables.expansionDepth}):
+JSON Structure:
 ${fullJSON}
 
 `;
             } else {
-                // For simple values or failed JSON conversion, show the actual variable value
                 return `### ${variable.name} [${badges.join(',')}]
 Type: ${variable.type} | Scope: ${variable.scope}${metadataStr}
 
@@ -300,7 +282,6 @@ Value: ${this.formatSimpleValue(variable)}
 `;
             }
         } else {
-            // Show truncated summary with option to expand
             let value = variable.value;
             if (value.length > 120) {
                 value = value.substring(0, 120) + '... [Enable "Show as JSON" to see full structure]';
@@ -315,9 +296,7 @@ Value: ${value}
     }
 
     private formatSimpleValue(variable: Variable): string {
-        // Handle different variable types appropriately
         if (variable.type === 'string') {
-            // For strings, remove quotes if present and show clean value
             let cleanValue = variable.value;
             if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
                 cleanValue = cleanValue.slice(1, -1);
@@ -340,25 +319,21 @@ Value: ${value}
             return variable.value;
         }
         
-        // For other types, return as-is
         return variable.value;
     }
 
     private getFullExpandedJSON(variable: Variable): string | null {
-        // Try to get the expanded variable data first
         const expandedVariables = this.contextCollector.getExpandedVariables();
         const expandedResult = expandedVariables.get(variable.name);
         
         if (expandedResult && expandedResult.success && expandedResult.data) {
             const jsonResult = this.convertSimplifiedValueToJSON(expandedResult.data, 0, this.currentSelection.variables.expansionDepth);
             
-            // Check if we got a meaningful JSON result
             if (jsonResult && jsonResult.trim() !== '{}' && jsonResult.trim() !== 'null' && jsonResult.trim() !== '""') {
                 return jsonResult;
             }
         }
         
-        // Fallback 1: try to parse rawValue as JSON
         if (variable.metadata.rawValue) {
             try {
                 const parsed = JSON.parse(variable.metadata.rawValue);
@@ -367,7 +342,6 @@ Value: ${value}
                     return result;
                 }
             } catch {
-                // Try to create structured representation
                 const structured = this.createStructuredJSON(variable.metadata.rawValue);
                 if (structured && structured.trim() !== '{}') {
                     return structured;
@@ -375,7 +349,6 @@ Value: ${value}
             }
         }
         
-        // Fallback 2: For simple types, create a proper JSON representation
         if (this.isSimpleType(variable.type)) {
             return this.createSimpleValueJSON(variable);
         }
@@ -397,7 +370,6 @@ Value: ${value}
         try {
             if (variable.type === 'string') {
                 let stringValue = variable.value;
-                // Remove quotes if they exist
                 if (stringValue.startsWith('"') && stringValue.endsWith('"')) {
                     stringValue = stringValue.slice(1, -1);
                 }
@@ -420,7 +392,6 @@ Value: ${value}
                 return variable.value === 'true' ? 'true' : 'false';
             }
             
-            // Default: return as string
             return JSON.stringify(variable.value, null, 2);
         } catch (error) {
             return JSON.stringify(variable.value, null, 2);
@@ -440,18 +411,15 @@ Value: ${value}
             return JSON.stringify(simplified);
         }
 
-        // Handle SimplifiedValue objects
         if (simplified.children && typeof simplified.children === 'object') {
             const jsonObj: any = {};
             
             Object.entries(simplified.children).forEach(([key, value]: [string, any]) => {
                 try {
                     if (value && typeof value === 'object' && value.displayValue !== undefined) {
-                        // This is a SimplifiedValue
                         if (value.children && Object.keys(value.children).length > 0) {
                             jsonObj[key] = JSON.parse(this.convertSimplifiedValueToJSON(value, currentDepth + 1, maxDepth));
                         } else {
-                            // Parse the actual display value
                             const parsedValue = this.parseDisplayValue(value.displayValue, value.originalType);
                             jsonObj[key] = parsedValue;
                         }
@@ -459,7 +427,6 @@ Value: ${value}
                         jsonObj[key] = this.parseDisplayValue(String(value), 'unknown');
                     }
                 } catch (error) {
-                    // Show the raw value instead of just stringifying
                     jsonObj[key] = value?.displayValue || String(value);
                 }
             });
@@ -467,7 +434,6 @@ Value: ${value}
             return JSON.stringify(jsonObj, null, 2);
         }
 
-        // Handle direct object
         if (simplified.displayValue && !simplified.children) {
             const parsedValue = this.parseDisplayValue(simplified.displayValue, simplified.originalType || 'unknown');
             return JSON.stringify(parsedValue);
@@ -481,7 +447,6 @@ Value: ${value}
             return null;
         }
 
-        // Handle unexpanded Go type references
         if (displayValue.match(/^<[^>]+>$/)) {
             const typeMatch = displayValue.match(/^<([^>]+)>$/);
             if (typeMatch) {
@@ -490,7 +455,6 @@ Value: ${value}
             }
         }
 
-        // Remove Go type annotations: <Type>(value) -> value
         let cleanValue = displayValue;
         if (cleanValue.match(/^<[^>]+>\([^)]*\)$/)) {
             const match = cleanValue.match(/^<[^>]+>\(([^)]*)\)$/);
@@ -501,7 +465,6 @@ Value: ${value}
             }
         }
 
-        // Handle complex Go debug strings with embedded values
         if (cleanValue.includes('<') && cleanValue.includes('>')) {
             const quotedMatch = cleanValue.match(/"([^"]*)"/g);
             if (quotedMatch && quotedMatch.length === 1) {
@@ -517,17 +480,14 @@ Value: ${value}
             return cleanValue.replace(/<[^>]*>/g, '').trim() || `[${type.split('.').pop()}]`;
         }
 
-        // Handle quoted strings
         if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
             return cleanValue.slice(1, -1);
         }
 
-        // Handle booleans
         if (cleanValue === 'true' || cleanValue === 'false') {
             return cleanValue === 'true';
         }
 
-        // Handle numbers
         if (/^\d+$/.test(cleanValue)) {
             return parseInt(cleanValue);
         }
@@ -536,17 +496,14 @@ Value: ${value}
             return parseFloat(cleanValue);
         }
 
-        // Handle memory addresses: 0xABCDEF -> "[Pointer]"
         if (/^0x[0-9a-fA-F]+$/.test(cleanValue)) {
             return `[Pointer: ${cleanValue}]`;
         }
 
-        // Handle empty parentheses: () -> null
         if (cleanValue === '()' || cleanValue === '') {
             return null;
         }
 
-        // Handle Go slice/array format: (length: X, cap: Y)
         if (cleanValue.includes('length:') || cleanValue.includes('cap:')) {
             const lengthMatch = cleanValue.match(/length:\s*(\d+)/);
             const capMatch = cleanValue.match(/cap:\s*(\d+)/);
@@ -556,12 +513,10 @@ Value: ${value}
             };
         }
 
-        // Handle nil with type info
         if (cleanValue.includes('nil <') && cleanValue.includes('>')) {
             return null;
         }
 
-        // Extract actual values from Go debug format
         if (cleanValue.includes('"')) {
             const stringMatch = cleanValue.match(/"([^"]*)"/);
             if (stringMatch) {
@@ -569,14 +524,12 @@ Value: ${value}
             }
         }
 
-        // Pattern: number values
         const numberMatch = cleanValue.match(/\b(\d+(?:\.\d+)?)\b/);
         if (numberMatch) {
             const num = parseFloat(numberMatch[1]);
             return Number.isInteger(num) ? parseInt(numberMatch[1]) : num;
         }
 
-        // Handle arrays
         if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
             try {
                 return JSON.parse(cleanValue);
@@ -585,7 +538,6 @@ Value: ${value}
             }
         }
 
-        // Handle objects
         if (cleanValue.startsWith('{') && cleanValue.endsWith('}')) {
             try {
                 return JSON.parse(cleanValue);
@@ -594,20 +546,16 @@ Value: ${value}
             }
         }
 
-        // Return the raw value if we can't parse it
         return cleanValue || `[${type.split('.').pop()}]`;
     }
 
     private createStructuredJSON(rawValue: string): string {
-        // Try to extract structured data from Go debug format
         try {
-            // Handle Go struct format: {field1: value1, field2: value2}
             if (rawValue.includes(':') && (rawValue.includes('{') || rawValue.includes(','))) {
                 const cleanValue = rawValue.replace(/^[^{]*{/, '{').replace(/}[^}]*$/, '}');
                 
-                // Simple parser for Go struct format
                 const obj: any = {};
-                const content = cleanValue.slice(1, -1); // Remove outer braces
+                const content = cleanValue.slice(1, -1);
                 
                 let current = '';
                 let depth = 0;
@@ -647,7 +595,6 @@ Value: ${value}
                     current += char;
                 }
                 
-                // Handle last field
                 if (currentKey && current.trim()) {
                     obj[currentKey] = this.parseDisplayValue(current.trim(), 'unknown');
                 }
@@ -692,7 +639,7 @@ Value: ${value}
                 break;
 
             case 'callLLM':
-                await this.handleLLMCall(message.query, message.context);
+                await this.handleCleanLLMCall(message.query, message.context);
                 break;
 
             case 'copyContext':
@@ -702,6 +649,36 @@ Value: ${value}
             case 'showFullAnalysis':
                 this.showFullAnalysis();
                 break;
+        }
+    }
+
+    private async handleCleanLLMCall(query: string, contextText: string): Promise<void> {
+        try {
+            const cleanContext = this.buildSelectedContext();
+            
+            console.log(`🤖 LLM call with clean context (${cleanContext.length} chars)`);
+            
+            const response = await this.llmService.callLLM(cleanContext, query, {
+                provider: 'openai',
+                model: 'gpt-4',
+                temperature: 0.3,
+                maxTokens: 4000
+            });
+
+            const doc = await vscode.workspace.openTextDocument({
+                content: `# AI Debug Analysis
+Query: ${query}
+
+## AI Analysis
+${response}
+
+---
+*Analysis based on clean debug context without internal metadata*`,
+                language: 'plaintext'
+            });
+            await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+        } catch (error) {
+            vscode.window.showErrorMessage(`LLM call failed: ${error.message}`);
         }
     }
 
@@ -734,12 +711,10 @@ Value: ${value}
                 
                 const doc = await vscode.workspace.openTextDocument({
                     content: `# Variable Expansion: ${variableName}
-Expanded at: ${this.getCurrentTimestamp()}
-User: ${this.getCurrentUser()}
 Depth: ${depth}
 Type: ${expanded.originalType}
 
-## Full JSON Structure
+## JSON Structure
 ${fullJSON}
 
 ## Display Value
@@ -760,220 +735,30 @@ ${Object.entries(expanded.children).map(([key, value]) =>
     }
 
     private showFullAnalysis(): void {
-        const context = this.contextCollector.getContext();
-        const timestamp = this.getCurrentTimestamp();
-        const user = this.getCurrentUser();
-        
-        // Use the same buildSelectedContext method to ensure consistency
         const selectedContext = this.buildSelectedContext();
         
-        let analysisContent = `# Go Debug Analysis - Enhanced Context
-Generated: ${timestamp}
-User: ${user}
-Session: ${context.debugInfo.sessionId}
-
-${selectedContext}`;
-
-        // Add additional comprehensive analysis sections based on user preferences
-        if (this.currentSelection.analysis.includeSymbolicExecution && context.symbolicExecution) {
-            analysisContent += '\n\n' + this.contextCollector.getSymbolicExecutionSummary();
-        }
-
-        if (this.currentSelection.analysis.includePathSensitivity && context.pathSensitivity) {
-            analysisContent += '\n\n' + this.contextCollector.getPathSensitivitySummary();
-        }
-
-        if (this.currentSelection.analysis.includeVariableExpansion) {
-            analysisContent += '\n\n' + this.contextCollector.getVariableExpansionSummary();
-        }
-
-        // Create a new document that can be attached to Git Copilot
         vscode.workspace.openTextDocument({
-            content: analysisContent,
+            content: `# Debug Analysis - Clean Context
+${selectedContext}
+
+---
+*This clean context can be safely shared with AI assistants*
+*No internal metadata, timestamps, or user information included*`,
             language: 'plaintext'
         }).then(doc => {
             vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
-            vscode.window.showInformationMessage('📄 Full analysis ready - you can now attach this file to Git Copilot for further questions');
+            vscode.window.showInformationMessage('📄 Clean analysis ready - you can now attach this to any AI assistant');
         });
-    }
-
-    private async handleLLMCall(query: string, contextText: string): Promise<void> {
-        try {
-            const context = this.contextCollector.getContext();
-            
-            // Build enhanced context with FULL JSON structures
-            let enhancedContext = `
-USER: ${this.getCurrentUser()}
-CURRENT_TIME: ${this.getCurrentTimestamp()}
-SESSION_ID: ${context.debugInfo.sessionId}
-
-ENHANCED_CONTEXT_METRICS:
-- Collection Time: ${context.debugInfo.performance.collectionTime}ms
-- Variable Expansion Time: ${context.debugInfo.performance.variableExpansionTime || 0}ms
-- Memory Usage: ${context.debugInfo.performance.memoryUsage}
-- Expanded Variables: ${context.debugInfo.performance.expandedVariablesCount}
-- Complex Structures: ${context.debugInfo.performance.complexStructuresFound}
-- Expansion Depth: ${this.currentSelection.variables.expansionDepth}
-
-CURRENT_LOCATION: ${context.currentLocation?.function || 'Unknown'}
-THREAD_FRAME: ${context.debugInfo.currentThreadId}/${context.debugInfo.currentFrameId}
-
-FULL_VARIABLE_DATA (Depth ${this.currentSelection.variables.expansionDepth}):
-`;
-
-            // Add full JSON for each expanded variable
-            const expandedVariables = this.contextCollector.getExpandedVariables();
-            const appVariables = this.contextCollector.getApplicationVariables().slice(0, 5);
-            
-            appVariables.forEach(variable => {
-                const fullJSON = this.getFullExpandedJSON(variable);
-                if (fullJSON) {
-                    enhancedContext += `
-## ${variable.name} (${variable.type})
-${fullJSON}
-`;
-                } else {
-                    enhancedContext += `
-## ${variable.name} (${variable.type})
-${this.formatSimpleValue(variable)}
-`;
-                }
-            });
-
-            // Add comprehensive path sensitivity analysis if selected
-            if (this.currentSelection.analysis.includePathSensitivity && context.pathSensitivity) {
-                const ps = context.pathSensitivity;
-                enhancedContext += `
-
-PATH_SENSITIVITY_ANALYSIS:
-- Path Coverage: ${(ps.pathAnalysis.pathCoverage * 100).toFixed(1)}%
-- Critical Paths: ${ps.pathAnalysis.criticalPaths.length}
-- High-Sensitivity Variables: ${ps.sensitivityMetrics.highSensitivityVariables.join(', ')}
-- Branch Points Detected: ${ps.pathAnalysis.branchPointsDetected}
-
-CRITICAL_PATHS (Top 5):
-${ps.pathAnalysis.criticalPaths.slice(0, 5).map((path, i) => `
-${i + 1}. ${path.description}
-   - Risk Level: ${path.riskLevel}
-   - Probability: ${(path.probability * 100).toFixed(1)}%
-   - Key Variables: ${path.keyVariables.join(', ')}
-   - Issues: ${path.potentialIssues.join(', ')}
-   - Test Suggestions: ${path.testSuggestions.join(', ')}
-`).join('')}
-
-BRANCH_POINTS:
-${ps.executionTree.branchPoints.slice(0, 5).map((branch, i) => `
-${i + 1}. ${branch.branchType}: ${branch.condition}
-   - Probability: ${(branch.probability * 100).toFixed(1)}%
-`).join('')}
-
-RECOMMENDATIONS:
-${ps.recommendations.slice(0, 3).map((rec, i) => `
-${i + 1}. ${rec.type}: ${rec.description} (${rec.priority} priority)
-`).join('')}`;
-            }
-
-            // Add comprehensive symbolic execution analysis if selected
-            if (this.currentSelection.analysis.includeSymbolicExecution && context.symbolicExecution) {
-                const se = context.symbolicExecution;
-                enhancedContext += `
-
-SYMBOLIC_EXECUTION_ANALYSIS:
-- Path Probability: ${(se.currentPath.pathProbability * 100).toFixed(1)}%
-- Alternative Paths: ${se.alternativePaths.length}
-- Constraints: ${se.currentPath.pathConstraints.length}
-- Potential Issues: ${se.executionSummary.potentialIssues.length}
-
-PATH_CONSTRAINTS:
-${se.currentPath.pathConstraints.slice(0, 5).map((constraint, i) => `
-${i + 1}. ${constraint.expression} (${constraint.isSatisfied ? 'satisfied' : 'unsatisfied'})
-`).join('')}
-
-ALTERNATIVE_EXECUTION_PATHS:
-${se.alternativePaths.slice(0, 3).map((alt, i) => `
-${i + 1}. ${alt.description}
-   - Probability: ${alt.probability}
-   - Required Changes: ${alt.requiredInputChanges.map(c => `${c.variable}: ${c.currentValue} → ${c.suggestedValue}`).join(', ')}
-   - Expected Outcome: ${alt.estimatedOutcome}
-   - Test Suggestion: ${alt.testSuggestion}
-`).join('')}
-
-POTENTIAL_ISSUES:
-${se.executionSummary.potentialIssues.map((issue, i) => `
-${i + 1}. ${issue.type.toUpperCase()}: ${issue.description}
-   - Severity: ${issue.severity}
-   - Location: ${issue.location.function}:${issue.location.line}
-   - Fix: ${issue.suggestedFix}
-`).join('')}`;
-            }
-
-            enhancedContext += `
-DEBUG_CONTEXT:
-${contextText}`;
-
-            const response = await this.llmService.callLLM(enhancedContext, query, {
-                provider: 'openai',
-                model: 'gpt-4',
-                temperature: 0.3,
-                maxTokens: 4000
-            });
-
-            const doc = await vscode.workspace.openTextDocument({
-                content: `# AI Debug Analysis - Full JSON Context (Depth ${this.currentSelection.variables.expansionDepth})
-Generated: ${this.getCurrentTimestamp()}
-User: ${this.getCurrentUser()}
-Query: ${query}
-
-## Enhanced Context Summary
-Location: ${context.currentLocation?.function || 'Unknown'}
-Variables: ${context.variables.length} (${context.debugInfo.performance.expandedVariablesCount} expanded)
-Memory Usage: ${context.debugInfo.performance.memoryUsage}
-Expansion Time: ${context.debugInfo.performance.variableExpansionTime || 0}ms
-Expansion Depth: ${this.currentSelection.variables.expansionDepth}
-
-## AI Analysis
-${response}
-
----
-Enhanced Go Debug Context Analyzer with Full JSON Expansion
-Session: ${context.debugInfo.sessionId}
-Generated: ${this.getCurrentTimestamp()}`,
-                language: 'plaintext'
-            });
-            await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
-        } catch (error) {
-            vscode.window.showErrorMessage(`LLM call failed: ${error.message}`);
-        }
     }
 
     copyContext(): void {
         const selectedContext = this.buildSelectedContext();
-        const context = this.contextCollector.getContext();
         
-        const exportContent = `# Enhanced Go Debug Context Export
-Generated: ${this.getCurrentTimestamp()}
-User: ${this.getCurrentUser()}
-Session: ${context.debugInfo.sessionId}
-
-## Enhanced Performance Metrics
-- Collection Time: ${context.debugInfo.performance.collectionTime}ms
-- Variable Expansion Time: ${context.debugInfo.performance.variableExpansionTime || 0}ms
-- Memory Usage: ${context.debugInfo.performance.memoryUsage}
-- Variables: ${context.variables.length} (${context.debugInfo.performance.expandedVariablesCount} expanded)
-- Complex Structures: ${context.debugInfo.performance.complexStructuresFound}
-- Expansion Depth: ${this.currentSelection.variables.expansionDepth}
-
-${selectedContext}
-
----
-Enhanced Go Debug Context Analyzer
-Deep Variable Expansion & Analysis
-Generated: ${this.getCurrentTimestamp()}`;
-        
-        vscode.env.clipboard.writeText(exportContent).then(() => {
-            vscode.window.showInformationMessage('📋 Context copied to clipboard!');
+        vscode.env.clipboard.writeText(selectedContext).then(() => {
+            vscode.window.showInformationMessage('📋 Clean context copied to clipboard!');
         });
     }
+
 
     private getCurrentUser(): string {
         return os.userInfo().username || 'unknown-user';
@@ -992,7 +777,7 @@ Generated: ${this.getCurrentTimestamp()}`;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Go Debug Context</title>
+    <title>Co Debug Context</title>
     <style>
         body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 20px; margin: 0; }
         .header { background: var(--vscode-textCodeBlock-background); padding: 15px; margin-bottom: 20px; border-radius: 6px; }
@@ -1020,18 +805,15 @@ Generated: ${this.getCurrentTimestamp()}`;
         .preview { font-family: var(--vscode-editor-font-family); font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; 
                    background-color: var(--vscode-textCodeBlock-background); padding: 15px; border-radius: 4px; 
                    border: 1px solid var(--vscode-panel-border); overflow-x: auto; }
-        .expansion-controls { background: var(--vscode-list-activeSelectionBackground); padding: 10px; border-radius: 4px; margin-bottom: 10px; }
         .depth-controls { background: var(--vscode-list-hoverBackground); padding: 10px; border-radius: 4px; margin-bottom: 10px; }
         .depth-input { width: 60px; padding: 4px; margin: 0 10px; text-align: center; border: 1px solid var(--vscode-input-border); 
                        border-radius: 3px; background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); }
-        .json-controls { background: var(--vscode-list-hoverBackground); padding: 8px; border-radius: 4px; margin-bottom: 10px; }
-        .analysis-controls { background: var(--vscode-list-hoverBackground); padding: 10px; border-radius: 4px; margin-bottom: 10px; }
         @media (max-width: 1000px) { .container { grid-template-columns: 1fr; height: auto; } }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="status">${statusIcon} ${statusText} | Full JSON Context | ${this.getCurrentTimestamp()}</div>
+        <div class="status">${statusIcon} ${statusText} | Clean Context | ${this.getCurrentTimestamp()}</div>
         
         <div class="metrics">
             <div class="metric"><div class="metric-value">${context.variables.length}</div><div>Variables</div></div>
@@ -1045,25 +827,18 @@ Generated: ${this.getCurrentTimestamp()}`;
         <div><strong>Location</strong>: ${context.currentLocation ? 
             `${context.currentLocation.function.split('.').pop()} (${context.currentLocation.file.split('/').pop()}:${context.currentLocation.line})` : 
             'None'}</div>
-        <div><strong>Thread/Frame</strong>: ${context.debugInfo.currentThreadId}/${context.debugInfo.currentFrameId}</div>
-        <div><strong>User</strong>: ${this.getCurrentUser()}</div>
         
         <div class="actions">
             <button class="btn primary" onclick="refresh()">🔄 Refresh</button>
-            <button class="btn" onclick="showFullAnalysis()">📄 Full Analysis (for Git Copilot)</button>
-            <button class="btn" onclick="copyContext()">📋 Copy Summary</button>
+            <button class="btn" onclick="showFullAnalysis()">📄 Full Analysis</button>
+            <button class="btn" onclick="copyContext()">📋 Copy Clean Context</button>
         </div>
     </div>
     
     <div class="container">
         <div class="panel">
-            <h2>🎯 Enhanced Context Selector</h2>
+            <h2>🎯 Context Selector</h2>
             
-            <div class="expansion-controls">
-                <h4>🔍 Variable Expansion</h4>
-                <label><input type="checkbox" id="showMemoryUsage" checked onchange="updateSelection()">Show Memory Usage</label>
-            </div>
-
             <div class="depth-controls">
                 <h4>📏 Expansion Depth</h4>
                 <div style="display: flex; align-items: center; margin: 10px 0;">
@@ -1076,20 +851,17 @@ Generated: ${this.getCurrentTimestamp()}`;
                 </div>
             </div>
 
-            <div class="json-controls">
-                <h4>📄 JSON Display Options</h4>
+            <div class="section">
+                <h3>📄 JSON Display Options</h3>
                 <label><input type="checkbox" id="showAsJSON" onchange="updateSelection()">Show Full JSON Structure</label>
-                <div style="font-size: 0.8em; color: var(--vscode-descriptionForeground); margin-top: 5px;">
-                    ⚠️ Large JSON structures may impact performance at depth ${currentDepth}+
-                </div>
+                <label><input type="checkbox" id="showMemoryUsage" checked onchange="updateSelection()">Show Memory Usage</label>
             </div>
 
-            <div class="analysis-controls">
-                <h4>🧠 Analysis Options</h4>
+            <div class="section">
+                <h3>🧠 Analysis Options</h3>
                 <label><input type="checkbox" id="includeSymbolicExecution" ${this.currentSelection.analysis.includeSymbolicExecution ? 'checked' : ''} onchange="updateSelection()">Include Symbolic Execution</label>
                 <label><input type="checkbox" id="includePathSensitivity" ${this.currentSelection.analysis.includePathSensitivity ? 'checked' : ''} onchange="updateSelection()">Include Path Sensitivity</label>
                 <label><input type="checkbox" id="includeVariableExpansion" ${this.currentSelection.analysis.includeVariableExpansion ? 'checked' : ''} onchange="updateSelection()">Include Variable Expansion Details</label>
-                <label><input type="checkbox" id="includePerformanceMetrics" ${this.currentSelection.analysis.includePerformanceMetrics ? 'checked' : ''} onchange="updateSelection()">Include Performance Metrics</label>
             </div>
             
             <div class="section">
@@ -1108,13 +880,13 @@ Generated: ${this.getCurrentTimestamp()}`;
             </div>
             
             <div class="query-section">
-                <h3>💬 AI Debug Assistant (Depth ${currentDepth})</h3>
+                <h3>💬 AI Debug Assistant (Clean Context)</h3>
                 <textarea id="queryInput" class="query-textarea" 
-                    placeholder="Ask AI about your debug context (expanded to depth ${currentDepth})...
+                    placeholder="Ask AI about your debug context...
 
 Examples:
 • What's wrong with the current execution?
-• Analyze the data structure at depth ${currentDepth}
+• Analyze the data structures
 • Explain the variable relationships
 • What are the critical paths showing?
 • Why is this function being called?"></textarea>
@@ -1123,15 +895,15 @@ Examples:
                     <button class="btn" onclick="clearQuery()">🗑️ Clear</button>
                 </div>
                 <div style="margin-top: 10px; font-size: 0.8em; color: var(--vscode-descriptionForeground);">
-                    💡 <strong>Full JSON Context (D${currentDepth})</strong>: Complete variable expansion, critical paths, memory tracking, performance metrics
+                    💡 <strong>Clean Context</strong>: No timestamps, user info, or internal metadata sent to AI
                 </div>
             </div>
         </div>
         
         <div class="panel">
-            <h2>👀 Enhanced Context Preview (Depth ${currentDepth})</h2>
+            <h2>👀 Enhanced Context Preview (Clean)</h2>
             <div id="previewContent" class="preview">
-                ${context.debugInfo.isStopped ? 'Select options to see enhanced context...' : 'Set breakpoint to see context...'}
+                ${context.debugInfo.isStopped ? 'Select options to see clean context...' : 'Set breakpoint to see context...'}
             </div>
         </div>
     </div>
@@ -1158,7 +930,7 @@ Examples:
                     includeSymbolicExecution: document.getElementById('includeSymbolicExecution').checked,
                     includePathSensitivity: document.getElementById('includePathSensitivity').checked,
                     includeVariableExpansion: document.getElementById('includeVariableExpansion').checked,
-                    includePerformanceMetrics: document.getElementById('includePerformanceMetrics').checked
+                    includePerformanceMetrics: false
                 }
             };
             vscode.postMessage({ command: 'updateSelection', selection: selection });
@@ -1166,7 +938,6 @@ Examples:
 
         function changeDepth(depth) {
             if (depth >= 1 && depth <= 10) {
-                console.log('🔍 ${this.getCurrentTimestamp()} - Changing depth to:', depth);
                 currentDepth = depth;
                 document.getElementById('depthInput').value = depth;
                 vscode.postMessage({ command: 'changeDepth', depth: depth });
@@ -1174,7 +945,6 @@ Examples:
         }
 
         function refresh() { 
-            console.log('🔄 ${this.getCurrentTimestamp()} - Refreshing with depth:', currentDepth);
             vscode.postMessage({ command: 'refreshContext' }); 
         }
         
@@ -1195,7 +965,6 @@ Examples:
             }
         });
 
-        // Initialize on load
         updateSelection();
     </script>
 </body>

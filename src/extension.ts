@@ -8,6 +8,9 @@ import { ExecutionPathGraphView } from './views/executionPathGraphView';
 import { LanguageDetector } from './detection/languageDetector';
 import { DebuggerFactory } from './factories/debuggerFactory';
 import { SupportedLanguage } from './languages/languageHandler';
+import { AIConfigurationService } from './services/aiConfigurationService';
+import { CoDebugAIControl } from './views/coDebugAIControl';
+import * as os from 'os';
 
 let contextCollector: ContextCollector;
 let delveClient: DelveClient;
@@ -15,33 +18,46 @@ let llmService: LLMService;
 let contextSelectorView: ContextSelectorView;
 let executionPathGraphService: ExecutionPathGraphService;
 let executionPathGraphView: ExecutionPathGraphView;
+let coDebugAIControl: CoDebugAIControl;
 let currentLanguage: SupportedLanguage | null = null;
 
+// Helper functions
+function getCurrentUser(): string {
+    return os.userInfo().username || 'unknown-user';
+}
+
+function getCurrentTimestamp(): string {
+    return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
 export function activate(context: vscode.ExtensionContext) {
+    console.log(`✅ Co Debugger AI: Activated at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
 
-    // Initialize LLM service
+    // Initialize services
     llmService = new LLMService();
+    coDebugAIControl = new CoDebugAIControl(llmService);
+    context.subscriptions.push(coDebugAIControl);
 
-    // Register commands (same as before)
+    // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('contextSelector.openView', () => {
-            console.log(`📱 Opening Context Selector view at 2025-06-13 04:50:07`);
+            console.log(`📱 Opening Context Selector view at ${getCurrentTimestamp()}`);
             contextSelectorView?.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.showExecutionGraph', () => {
-            console.log(`📊 Opening Execution Path Graph at 2025-06-13 04:50:07`);
+            console.log(`📊 Opening Execution Path Graph at ${getCurrentTimestamp()}`);
             executionPathGraphView?.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.refreshContext', async () => {
-            console.log(`🔄 Manual refresh command triggered for ${currentLanguage || 'unknown'}`);
+            console.log(`🔄 Manual refresh command triggered for ${currentLanguage || 'unknown'} at ${getCurrentTimestamp()}`);
             try {
                 await contextCollector?.refreshAll();
                 contextSelectorView?.refresh();
                 vscode.window.showInformationMessage(`✅ ${currentLanguage || 'Debug'} context refreshed successfully`);
             } catch (error) {
-                console.error(`❌ Manual refresh failed`, error);
+                console.error(`❌ Manual refresh failed at ${getCurrentTimestamp()}:`, error);
                 vscode.window.showErrorMessage(`❌ Refresh failed: ${error.message}`);
             }
         }),
@@ -58,21 +74,37 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 vscode.window.showWarningMessage('No active debug session');
             }
+        }),
+
+        vscode.commands.registerCommand('coDebugger.configureAI', async () => {
+            await AIConfigurationService.configureAI(llmService);
+        }),
+
+        vscode.commands.registerCommand('coDebugAI.showQuickMenu', async () => {
+            await coDebugAIControl.showQuickMenu();
         })
     );
 
     // VS Code Debug Event Handlers
     const onStackItemChanged = vscode.debug.onDidChangeActiveStackItem((stackItem) => {
         if (stackItem && isLanguageSupported(stackItem.session.configuration.type)) {
-            console.log(`🎯 VS Code active stack item changed at 2025-06-13 04:50:07:`, {
+            console.log(`🎯 VS Code active stack item changed at ${getCurrentTimestamp()}:`, {
                 sessionName: stackItem.session.name,
                 threadId: stackItem.threadId,
-                language: currentLanguage
+                language: currentLanguage,
+                user: getCurrentUser()
             });
+            
+            // Notify Co Debug AI Control
+            coDebugAIControl.setDebugState(true);
             
             delveClient?.notifyStoppedFromVSCode();
         } else if (!stackItem) {
-            console.log(`🔄 VS Code active stack item cleared at 2025-06-13 04:50:07`);
+            console.log(`🔄 VS Code active stack item cleared at ${getCurrentTimestamp()}`);
+            
+            // Notify Co Debug AI Control
+            coDebugAIControl.setDebugState(false);
+            
             delveClient?.notifyContinuedFromVSCode();
         }
     });
@@ -81,11 +113,12 @@ export function activate(context: vscode.ExtensionContext) {
         const detectedLanguage = LanguageDetector.detectLanguage(session);
         
         if (isLanguageSupported(session.configuration.type) || LanguageDetector.isLanguageSupported(detectedLanguage)) {
-            console.log(`🔧 ${detectedLanguage} debug session started at 2025-06-13 04:50:07`, {
+            console.log(`🔧 ${detectedLanguage} debug session started at ${getCurrentTimestamp()}`, {
                 name: session.name,
                 type: session.type,
                 configuration: session.configuration.name,
-                detectedLanguage
+                detectedLanguage,
+                user: getCurrentUser()
             });
             
             currentLanguage = detectedLanguage;
@@ -93,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
             // Create appropriate DelveClient based on language
             delveClient = createLanguageAwareDelveClient(session, detectedLanguage);
             
-            // Use existing ContextCollector unchanged
+            // Initialize collectors
             contextCollector = new ContextCollector(delveClient);
             contextSelectorView = new ContextSelectorView(contextCollector, llmService, delveClient);
             executionPathGraphService = new ExecutionPathGraphService(contextCollector, delveClient);
@@ -102,15 +135,21 @@ export function activate(context: vscode.ExtensionContext) {
             delveClient.attachToSession(session);
             contextCollector.startCollection();
             
+            // Notify Co Debug AI Control
+            coDebugAIControl.setContext(contextCollector, detectedLanguage);
+            
             vscode.window.showInformationMessage(
-                `🚀 Universal Debugger AI connected to ${detectedLanguage.toUpperCase()} debugger`,
+                `🚀 Co Debugger AI connected to ${detectedLanguage.toUpperCase()} debugger`,
                 'Open Context View',
-                'Show Execution Graph'
+                'Show Execution Graph',
+                'Configure AI'
             ).then(selection => {
                 if (selection === 'Open Context View') {
                     vscode.commands.executeCommand('contextSelector.openView');
                 } else if (selection === 'Show Execution Graph') {
                     vscode.commands.executeCommand('contextSelector.showExecutionGraph');
+                } else if (selection === 'Configure AI') {
+                    vscode.commands.executeCommand('coDebugger.configureAI');
                 }
             });
         }
@@ -118,14 +157,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     const onDebugSessionTerminated = vscode.debug.onDidTerminateDebugSession((session) => {
         if (currentLanguage && (isLanguageSupported(session.configuration.type) || session === delveClient?.currentSession)) {
-            console.log(`🔌 ${currentLanguage} debug session terminated at 2025-06-13 04:50:07:`, session.name);
+            console.log(`🔌 ${currentLanguage} debug session terminated at ${getCurrentTimestamp()}:`, {
+                sessionName: session.name,
+                user: getCurrentUser()
+            });
             
             delveClient?.detachFromSession();
             contextCollector?.stopCollection();
             executionPathGraphService?.dispose();
             executionPathGraphView?.dispose();
             
-            vscode.window.showInformationMessage(`🛑 Universal Debugger AI disconnected from ${currentLanguage.toUpperCase()} debugger`);
+            // Clear Co Debug AI Control
+            coDebugAIControl.clearContext();
+            
+            vscode.window.showInformationMessage(`🛑 Co Debugger AI disconnected from ${currentLanguage.toUpperCase()} debugger`);
             
             // Clean up
             currentLanguage = null;
@@ -137,11 +182,14 @@ export function activate(context: vscode.ExtensionContext) {
             const detectedLanguage = LanguageDetector.detectLanguage(session);
             
             if (isLanguageSupported(session.configuration.type) || LanguageDetector.isLanguageSupported(detectedLanguage)) {
-                console.log(`🔄 Active ${detectedLanguage} debug session changed at 2025-06-13 04:50:07:`, session.name);
+                console.log(`🔄 Active ${detectedLanguage} debug session changed at ${getCurrentTimestamp()}:`, {
+                    sessionName: session.name,
+                    user: getCurrentUser()
+                });
                 
                 // If language changed, reinitialize
                 if (currentLanguage !== detectedLanguage) {
-                    console.log(`🔄 Switching from ${currentLanguage} to ${detectedLanguage} at 2025-06-13 04:50:07`);
+                    console.log(`🔄 Switching from ${currentLanguage} to ${detectedLanguage} at ${getCurrentTimestamp()}`);
                     
                     currentLanguage = detectedLanguage;
                     
@@ -156,17 +204,21 @@ export function activate(context: vscode.ExtensionContext) {
                     contextSelectorView = new ContextSelectorView(contextCollector, llmService, delveClient);
                     executionPathGraphService = new ExecutionPathGraphService(contextCollector, delveClient);
                     executionPathGraphView = new ExecutionPathGraphView(executionPathGraphService, context);
+                    
+                    // Update Co Debug AI Control
+                    coDebugAIControl.setContext(contextCollector, detectedLanguage);
                 }
                 
                 delveClient?.attachToSession(session);
                 contextCollector?.startCollection();
             }
         } else if (!session) {
-            console.log(`🔌 No active debug session at 2025-06-13 04:50:07`);
+            console.log(`🔌 No active debug session at ${getCurrentTimestamp()}`);
+            coDebugAIControl.clearContext();
         }
     });
 
-    // Register all subscriptions (same as before)
+    // Register all subscriptions
     context.subscriptions.push(
         onStackItemChanged,
         onDebugSessionStarted, 
@@ -174,7 +226,7 @@ export function activate(context: vscode.ExtensionContext) {
         onDebugSessionChanged
     );
 
-    // Check for existing debug session (same as before)
+    // Check for existing debug session
     const activeSession = vscode.debug.activeDebugSession;
     const activeStackItem = vscode.debug.activeStackItem;
     
@@ -182,7 +234,10 @@ export function activate(context: vscode.ExtensionContext) {
         const detectedLanguage = LanguageDetector.detectLanguage(activeSession);
         
         if (isLanguageSupported(activeSession.configuration.type) || LanguageDetector.isLanguageSupported(detectedLanguage)) {
-            console.log(`🔍 Found existing ${detectedLanguage} debug session at 2025-06-13 04:50:07:`, activeSession.name);
+            console.log(`🔍 Found existing ${detectedLanguage} debug session at ${getCurrentTimestamp()}:`, {
+                sessionName: activeSession.name,
+                user: getCurrentUser()
+            });
             
             currentLanguage = detectedLanguage;
             delveClient = createLanguageAwareDelveClient(activeSession, detectedLanguage);
@@ -194,71 +249,84 @@ export function activate(context: vscode.ExtensionContext) {
             delveClient.attachToSession(activeSession);
             contextCollector.startCollection();
             
+            // Set Co Debug AI Control
+            coDebugAIControl.setContext(contextCollector, detectedLanguage);
+            
             if (activeStackItem) {
-                console.log(`🎯 Found existing active stack item at 2025-06-13 04:50:07:`, {
+                console.log(`🎯 Found existing active stack item at ${getCurrentTimestamp()}:`, {
                     sessionName: activeStackItem.session.name,
                     threadId: activeStackItem.threadId,
-                    language: currentLanguage
+                    language: currentLanguage,
+                    user: getCurrentUser()
                 });
+                coDebugAIControl.setDebugState(true);
                 delveClient.notifyStoppedFromVSCode();
+            } else {
+                coDebugAIControl.setDebugState(false);
             }
         }
+    } else {
+        // Show welcome configuration on first activation
+        setTimeout(() => {
+            AIConfigurationService.quickConfigure();
+        }, 2000);
     }
 
-    console.log(`✅ Universal Debugger AI fully activated with multi-language support at 2025-06-13 04:50:07`);
+    console.log(`✅ Co Debugger AI fully activated with multi-language support at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
 }
 
 export function deactivate() {
-    console.log(`👋 Universal Debugger AI: Deactivated at 2025-06-13 04:50:07`);
+    console.log(`👋 Co Debugger AI: Deactivated at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
     
     try {
+        coDebugAIControl?.dispose();
         delveClient?.dispose();
         contextCollector?.dispose();
         executionPathGraphService?.dispose();
         executionPathGraphView?.dispose();
-        console.log(`✅ All resources disposed successfully at 2025-06-13 04:50:07`);
+        console.log(`✅ All resources disposed successfully at ${getCurrentTimestamp()}`);
     } catch (error) {
-        console.error(`❌ Error during deactivation at 2025-06-13 04:50:07:`, error);
+        console.error(`❌ Error during deactivation at ${getCurrentTimestamp()}:`, error);
     }
 }
 
 // Helper function to check if a debug type is supported
 function isLanguageSupported(debugType: string): boolean {
-    const supportedTypes = ['go', 'python', 'debugpy', 'node', 'chrome', 'msedge', 'typescript'];
+    const supportedTypes = [
+        'go', 'python', 'debugpy', 'node', 'chrome', 'msedge', 'typescript',
+        'java', 'cppdbg', 'cppvsdbg', 'lldb', 'gdb', 'csharp', 'coreclr'
+    ];
     return supportedTypes.includes(debugType);
 }
 
-// Create a language-aware DelveClient (either real DelveClient for Go or wrapped protocol for others)
+// Create a language-aware DelveClient
 function createLanguageAwareDelveClient(session: vscode.DebugSession, language: SupportedLanguage): DelveClient {
     if (language === 'go') {
-        // For Go, use the original DelveClient unchanged
-        console.log(`🐹 Creating original DelveClient for Go at 2025-06-13 04:50:07`);
+        console.log(`🐹 Creating original DelveClient for Go at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
         return new DelveClient();
     } else {
-        // For other languages, create a DelveClient that wraps the universal protocol
-        console.log(`🌍 Creating wrapped DelveClient for ${language} at 2025-06-13 04:50:07`);
+        console.log(`🌍 Creating wrapped DelveClient for ${language} at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
         
         try {
             const protocol = DebuggerFactory.createDebuggerProtocol(language);
             return createDelveClientWrapper(protocol, language);
         } catch (error) {
             console.warn(`⚠️ Could not create ${language} protocol, falling back to Go DelveClient: ${error.message}`);
-            return new DelveClient(); // Fallback to original for compatibility
+            return new DelveClient();
         }
     }
 }
 
 // Create a DelveClient wrapper that delegates to universal protocols
 function createDelveClientWrapper(protocol: any, language: SupportedLanguage): DelveClient {
-    // Extend DelveClient to delegate method calls to the universal protocol
     class LanguageDelveClientWrapper extends DelveClient {
         constructor() {
             super();
-            console.log(`🔗 Creating ${language} DelveClient wrapper at 2025-06-13 04:50:07`);
+            console.log(`🔗 Creating ${language} DelveClient wrapper at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
         }
 
         attachToSession(session: vscode.DebugSession): void {
-            console.log(`🔗 ${language} wrapper: Attaching to session: ${session.name} at 2025-06-13 04:50:07`);
+            console.log(`🔗 ${language} wrapper: Attaching to session: ${session.name} at ${getCurrentTimestamp()}`);
             protocol.attachToSession(session);
             this.currentSession = session;
             this['isAttached'] = true;
@@ -266,7 +334,7 @@ function createDelveClientWrapper(protocol: any, language: SupportedLanguage): D
         }
 
         detachFromSession(): void {
-            console.log(`🔌 ${language} wrapper: Detaching from session at 2025-06-13 04:50:07`);
+            console.log(`🔌 ${language} wrapper: Detaching from session at ${getCurrentTimestamp()}`);
             protocol.detachFromSession();
             this.currentSession = null;
             this['isAttached'] = false;
@@ -282,7 +350,7 @@ function createDelveClientWrapper(protocol: any, language: SupportedLanguage): D
         }
 
         async notifyStoppedFromVSCode(): Promise<void> {
-            console.log(`🛑 ${language} wrapper: Debug stopped at 2025-06-13 04:50:07`);
+            console.log(`🛑 ${language} wrapper: Debug stopped at ${getCurrentTimestamp()}`);
             await protocol.notifyStoppedFromVSCode();
             this['currentThreadId'] = protocol.getCurrentThreadId();
             this['currentFrameId'] = protocol.getCurrentFrameId();
@@ -294,7 +362,7 @@ function createDelveClientWrapper(protocol: any, language: SupportedLanguage): D
         }
 
         notifyContinuedFromVSCode(): void {
-            console.log(`▶️ ${language} wrapper: Debug continued at 2025-06-13 04:50:07`);
+            console.log(`▶️ ${language} wrapper: Debug continued at ${getCurrentTimestamp()}`);
             protocol.notifyContinuedFromVSCode();
             this['currentThreadId'] = null;
             this['currentFrameId'] = null;

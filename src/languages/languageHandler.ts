@@ -1,4 +1,4 @@
-export type SupportedLanguage = 'go' | 'python' | 'javascript' | 'typescript' | 'java' | 'csharp';
+export type SupportedLanguage = 'go' | 'python' | 'javascript' | 'typescript' | 'java' | 'cpp' | 'csharp';
 
 export interface TypeContext {
     scopeName?: string;

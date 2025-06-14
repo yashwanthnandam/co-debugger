@@ -5,7 +5,7 @@ import { DebuggerProtocol } from '../protocols/debuggerProtocol';
 import { LanguageHandler, SupportedLanguage } from '../languages/languageHandler';
 import { LanguageDetector } from '../detection/languageDetector';
 import { DebuggerFactory } from '../factories/debuggerFactory';
-import { UniversalDataStructureHandler } from './universalDatastructureHandler';
+import { CoDataStructureHandler } from './universalDatastructureHandler';
 import { VariableExpansionService, ExpansionResult } from './variableExpansionService';
 import { SymbolicExecutor, SymbolicExecutionContext } from './symbolicExecutor';
 import { PathSensitivityAnalyzer, PathSensitivityReport } from './pathSensitivityAnalyzer';
@@ -87,7 +87,7 @@ export interface CallGraphNode {
     isStatic: boolean;
 }
 
-export interface UniversalContextData {
+export interface CoContextData {
     language: SupportedLanguage;
     functionCalls: FunctionCall[];
     variables: Variable[];
@@ -130,13 +130,13 @@ export interface UniversalContextData {
     };
 }
 
-export class UniversalContextCollector extends EventEmitter {
+export class CoContextCollector extends EventEmitter {
     private debuggerProtocol: DebuggerProtocol;
     private languageHandler: LanguageHandler;
     private language: SupportedLanguage;
-    private context: UniversalContextData;
+    private context: CoContextData;
     private isCollecting = false;
-    private dataHandler: UniversalDataStructureHandler;
+    private dataHandler: CoDataStructureHandler;
     private variableExpansionService: VariableExpansionService;
     private symbolicExecutor: SymbolicExecutor;
     private pathSensitivityAnalyzer: PathSensitivityAnalyzer;
@@ -153,7 +153,7 @@ export class UniversalContextCollector extends EventEmitter {
         this.sessionId = this.generateSessionId();
         
         // Initialize services with language handlers
-        this.dataHandler = new UniversalDataStructureHandler(this.languageHandler);
+        this.dataHandler = new CoDataStructureHandler(this.languageHandler);
         this.variableExpansionService = new VariableExpansionService();
         this.symbolicExecutor = new SymbolicExecutor(this.sessionId);
         this.pathSensitivityAnalyzer = new PathSensitivityAnalyzer(this.sessionId);
@@ -192,7 +192,7 @@ export class UniversalContextCollector extends EventEmitter {
 
         this.setupEventListeners();
         
-        console.log(`🌍 Universal Context Collector initialized for ${this.language} at 2025-06-13 04:05:26 (User: ${this.getCurrentUser()})`);
+        console.log(`🌍 Co Context Collector initialized for ${this.language} at 2025-06-13 04:05:26 (User: ${this.getCurrentUser()})`);
     }
 
     private getCurrentUser(): string {
@@ -250,13 +250,13 @@ export class UniversalContextCollector extends EventEmitter {
 
     startCollection(): void {
         this.isCollecting = true;
-        console.log(`📊 Universal context collection enabled for ${this.language} at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
+        console.log(`📊 Co context collection enabled for ${this.language} at ${this.getCurrentTimestamp()} (User: ${this.getCurrentUser()})`);
     }
 
     stopCollection(): void {
         this.isCollecting = false;
         this.clearContext();
-        console.log(`⏹️ Universal context collection disabled for ${this.language} at ${this.getCurrentTimestamp()}`);
+        console.log(`⏹️ Co context collection disabled for ${this.language} at ${this.getCurrentTimestamp()}`);
     }
 
     async notifyStoppedFromVSCode(): Promise<void> {
@@ -344,7 +344,7 @@ export class UniversalContextCollector extends EventEmitter {
                 
                 console.log(`📍 Current ${this.language} location at ${this.getCurrentTimestamp()}:`, this.context.currentLocation);
                 
-                // Universal context collection
+                // Co context collection
                 await Promise.all([
                     this.collectFunctionCalls(),
                     this.collectVariables(),
@@ -393,7 +393,7 @@ export class UniversalContextCollector extends EventEmitter {
                     currentDepth: config.maxVariableDepth
                 };
                 
-                console.log(`✅ Universal ${this.language} context collection complete at ${this.getCurrentTimestamp()}:`, {
+                console.log(`✅ Co ${this.language} context collection complete at ${this.getCurrentTimestamp()}:`, {
                     functionCalls: this.context.functionCalls.length,
                     variables: this.context.variables.length,
                     expandedVariables: this.expandedVariables.size,
@@ -703,7 +703,7 @@ export class UniversalContextCollector extends EventEmitter {
     }
 
     // Public API methods
-    getContext(): UniversalContextData {
+    getContext(): CoContextData {
         return { 
             ...this.context,
             debugInfo: {
@@ -780,7 +780,7 @@ export class UniversalContextCollector extends EventEmitter {
     getContextSummary(): string {
         const context = this.getContext();
         
-        return `# Universal Context Summary (${this.language.toUpperCase()})
+        return `# Co Context Summary (${this.language.toUpperCase()})
 
 **Generated**: ${this.getCurrentTimestamp()}
 **User**: ${this.getCurrentUser()}
@@ -831,13 +831,13 @@ ${this.getApplicationVariables().slice(0, 10).map((v, i) =>
 ).join('\n') || 'No application variables available'}
 
 ---
-*Generated by Universal Multi-Language Debug Context Analyzer*
+*Generated by Co Multi-Language Debug Context Analyzer*
 *Language: ${this.language} | Timestamp: ${this.getCurrentTimestamp()}*
 `;
     }
 
     dispose(): void {
-        console.log(`🧹 Disposing Universal Context Collector for ${this.language} at ${this.getCurrentTimestamp()}`);
+        console.log(`🧹 Disposing Co Context Collector for ${this.language} at ${this.getCurrentTimestamp()}`);
         
         this.stopCollection();
         this.variableExpansionService?.clearHistory();

@@ -9,7 +9,6 @@ export class LanguageDetector {
         console.log(`🔍 Detecting language for debug session: ${session.name}`);
         console.log(`📋 Session type: ${config.type}, program: ${config.program}`);
         
-        // Primary detection: debug session type
         switch (config.type) {
             case 'go':
             case 'dlv':
@@ -26,6 +25,11 @@ export class LanguageDetector {
                 return 'typescript';
             case 'java':
                 return 'java';
+            case 'cppdbg':
+            case 'cppvsdbg':
+            case 'lldb':
+            case 'gdb':
+                return 'cpp';
             case 'csharp':
             case 'coreclr':
                 return 'csharp';
@@ -48,21 +52,65 @@ export class LanguageDetector {
                 case '.tsx':
                     return 'typescript';
                 case '.java':
+                case '.class':
+                case '.jar':
                     return 'java';
+                case '.cpp':
+                case '.cc':
+                case '.cxx':
+                case '.c++':
+                case '.c':
+                case '.h':
+                case '.hpp':
+                case '.hxx':
+                case '.exe':
+                    return 'cpp';
+                case '.cs':
+                case '.dll':
+                    return 'csharp';
+            }
+        }
+        
+        // Tertiary detection: current active file
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor) {
+            const ext = path.extname(activeEditor.document.fileName).toLowerCase();
+            switch (ext) {
+                case '.go':
+                    return 'go';
+                case '.py':
+                case '.pyw':
+                    return 'python';
+                case '.js':
+                case '.mjs':
+                case '.cjs':
+                    return 'javascript';
+                case '.ts':
+                case '.tsx':
+                    return 'typescript';
+                case '.java':
+                    return 'java';
+                case '.cpp':
+                case '.cc':
+                case '.cxx':
+                case '.c++':
+                case '.c':
+                case '.h':
+                case '.hpp':
+                case '.hxx':
+                    return 'cpp';
                 case '.cs':
                     return 'csharp';
             }
         }
         
-        // Tertiary detection: workspace analysis
         const workspaceLanguage = this.detectFromWorkspace();
         if (workspaceLanguage !== 'go') {
-            console.log(`🔍 Detected language from workspace: ${workspaceLanguage}`);
+            console.log(`🔍 Detected language from workspace: ${workspaceLanguage} at 2025-06-14 09:37:29`);
             return workspaceLanguage;
         }
         
-        // Fallback to Go (original implementation)
-        console.log(`⚠️ Could not detect language, defaulting to Go`);
+        console.log(`⚠️ Could not detect language, defaulting to Go at 2025-06-14 09:37:29`);
         return 'go';
     }
 
@@ -74,14 +122,30 @@ export class LanguageDetector {
         
         const rootPath = workspaceFolders[0].uri.fsPath;
         
-        // Check for language-specific files
+        // Language indicators with priority order
         const languageIndicators = [
-            { files: ['package.json', 'node_modules'], language: 'javascript' as SupportedLanguage },
-            { files: ['tsconfig.json', '*.ts'], language: 'typescript' as SupportedLanguage },
-            { files: ['requirements.txt', '*.py', 'setup.py', 'Pipfile'], language: 'python' as SupportedLanguage },
-            { files: ['go.mod', 'go.sum', '*.go'], language: 'go' as SupportedLanguage },
-            { files: ['*.java', 'pom.xml', 'build.gradle'], language: 'java' as SupportedLanguage },
-            { files: ['*.cs', '*.csproj', '*.sln'], language: 'csharp' as SupportedLanguage }
+            // Java indicators
+            { files: ['pom.xml', 'build.gradle', 'gradle.properties'], language: 'java' as SupportedLanguage },
+            { files: ['*.java'], language: 'java' as SupportedLanguage },
+            
+            // C++ indicators  
+            { files: ['CMakeLists.txt', 'Makefile', 'makefile'], language: 'cpp' as SupportedLanguage },
+            { files: ['*.cpp', '*.cc', '*.cxx'], language: 'cpp' as SupportedLanguage },
+            
+            // JavaScript/TypeScript indicators
+            { files: ['package.json'], language: 'javascript' as SupportedLanguage },
+            { files: ['tsconfig.json'], language: 'typescript' as SupportedLanguage },
+            
+            // Python indicators
+            { files: ['requirements.txt', 'setup.py', 'Pipfile', 'pyproject.toml'], language: 'python' as SupportedLanguage },
+            { files: ['*.py'], language: 'python' as SupportedLanguage },
+            
+            // Go indicators
+            { files: ['go.mod', 'go.sum'], language: 'go' as SupportedLanguage },
+            { files: ['*.go'], language: 'go' as SupportedLanguage },
+            
+            // C# indicators
+            { files: ['*.csproj', '*.sln'], language: 'csharp' as SupportedLanguage }
         ];
         
         for (const indicator of languageIndicators) {
@@ -96,13 +160,19 @@ export class LanguageDetector {
     private static hasAnyFile(rootPath: string, patterns: string[]): boolean {
         try {
             const fs = require('fs');
-            const glob = require('glob');
+            const path = require('path');
             
             for (const pattern of patterns) {
                 if (pattern.startsWith('*')) {
-                    // Use glob for wildcard patterns
-                    const matches = glob.sync(pattern, { cwd: rootPath });
-                    if (matches.length > 0) return true;
+                    // Simple wildcard check
+                    const extension = pattern.substring(1);
+                    try {
+                        const files = fs.readdirSync(rootPath);
+                        const found = files.some((file: string) => file.endsWith(extension));
+                        if (found) return true;
+                    } catch (error) {
+                        // Continue to next pattern
+                    }
                 } else {
                     // Check for exact file
                     const filePath = path.join(rootPath, pattern);
@@ -110,14 +180,14 @@ export class LanguageDetector {
                 }
             }
         } catch (error) {
-            console.warn(`Error checking workspace files: ${error.message}`);
+            console.warn(`⚠️ Error checking workspace files at 2025-06-14 09:37:29: ${error.message}`);
         }
         
         return false;
     }
 
     static getSupportedLanguages(): SupportedLanguage[] {
-        return ['go', 'python', 'javascript', 'typescript', 'java', 'csharp'];
+        return ['go', 'python', 'javascript', 'typescript', 'java', 'cpp', 'csharp'];
     }
 
     static isLanguageSupported(language: string): boolean {

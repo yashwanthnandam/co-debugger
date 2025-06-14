@@ -1,121 +1,188 @@
-# Universal Debugger AI
+# Co Debugger AI 🤖
 
-**AI-powered multi-language debugging extension with advanced symbolic execution and path-sensitivity analysis for Visual Studio Code.**
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://marketplace.visualstudio.com/items?itemName=NandamYashwanth.go-debugger-ai)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.60.0+-orange.svg)](https://code.visualstudio.com/)
+
+**AI-powered multi-language debugging with symbolic execution and path-sensitivity analysis**
+
+Transform your debugging experience with intelligent context analysis, GitHub Copilot integration, and multi-language support. Co Debugger AI provides instant access to comprehensive debugging insights without leaving your editor.
+
 
 ---
 
-## 🌟 Features
+## ✨ Features
 
-### 🔍 Multi-Language Support
+### 🚀 Universal Language Support
 
-* **Go**: Full Delve debugger integration with advanced context analysis
-* **Python**: Complete debugpy support with async/await analysis
-* **JavaScript/TypeScript**: Node.js and browser debugging with closure analysis
-* **Automatic Detection**: Seamlessly switches between languages based on debug session
+* 🐹 Go (Delve)
+* 🐍 Python (debugpy)
+* ⚡ JavaScript/TypeScript (Node, Chrome, Edge)
+* ☕ Java (JDB)
+* 🔧 C/C++ (GDB, LLDB)
+* 🔷 C# (.NET Core)
 
-### 🧠 Advanced AI Analysis
+### 🤖 AI-Powered Analysis
 
-* **Symbolic Execution**: Analyze execution paths and constraints
-* **Path-Sensitivity Analysis**: Track variable states across different execution paths
-* **Context-Aware Variable Expansion**: Deep inspection of complex data structures
-* **Business Logic Detection**: Automatically identifies application-relevant code
+* **Symbolic Execution** - Predict alternative execution paths
+* **Path Sensitivity** - Analyze variable dependencies
+* **Smart Variable Classification** - Highlight business logic vs system variables
+* **Error Prediction** - AI-driven root cause detection
 
-### 📊 Rich Debugging Context
+### 🎯 GitHub Copilot Integration
 
-* Enhanced Variable Analysis
-* Execution Path Graphs
-* Performance Metrics
-* Memory Usage Tracking
+* 10+ specialized context types
+* One-click status bar control
+* Side panel export
+* Multiple format outputs
 
-### 🤖 AI Integration
+### ⚡ Smart Context Collection
 
-* **OpenAI GPT Support**: GPT-3.5, GPT-4, and custom models
-* **Anthropic Claude Support**
-* **Azure OpenAI Integration**
-* **Custom Endpoints**
+* Deep object inspection
+* Memory usage tracking
+* Type inference
+* Business logic focus
+
+---
+
+## 📅 Installation
+
+### From Marketplace
+
+```bash
+ext install NandamYashwanth.go-debugger-ai
+```
+
+### From Command Palette
+
+* `Ctrl+Shift+P` / `Cmd+Shift+P`
+* `Extensions: Install Extensions`
+* Search for `Co Debugger AI`
+
+### Manual Installation
+
+```bash
+git clone https://github.com/yashwanthnandam/go-debugger-ai.git
+cd go-debugger-ai
+npm install
+npm run package
+code --install-extension co-debugger-ai-2.0.0.vsix
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Installation
+### 1. Configure AI Provider
 
-**From Marketplace**:
-
-```sh
-ext install NandamYashwanth.go-debugger-ai
+```bash
+> Co Debug: Configure AI Assistant
 ```
 
-**From VSIX**:
+Supported:
 
-1. Download latest `.vsix` from releases
-2. Install via VS Code: Extensions > `...` > Install from VSIX
+* OpenAI (GPT-3.5/4/4 Turbo)
+* Anthropic (Claude 3)
+* Azure OpenAI
+* Custom endpoints
 
-### Initial Setup
+### 2. Start Debugging
 
-**Configure AI Provider (optional)**:
+* Set breakpoints
+* Hit `F5` to start session
+* Click Co Debug AI in the status bar
 
-```json
-{
-  "contextSelector.llm.provider": "openai",
-  "contextSelector.llm.openaiApiKey": "your-api-key-here",
-  "contextSelector.llm.model": "gpt-4"
-}
-```
+### 3. Generate Context
 
-**Enable Multi-Language Support**:
-
-```json
-{
-  "universalDebugger.multiLanguage.enabled": true,
-  "universalDebugger.multiLanguage.autoDetection": true
-}
-```
-
-### First Debug Session
-
-1. Open project (Go, Python, JS, or TS)
-2. Set breakpoints
-3. Start debugging
-4. Open Context Analyzer:
-
-   * Command Palette: `Universal Debug: Open Context Analyzer`
-   * Or use debug toolbar icon
+| Context Type      | Description           | Use Case        |
+| ----------------- | --------------------- | --------------- |
+| 🔧 Quick Fix      | Minimal error context | Troubleshooting |
+| 📊 Essential Vars | Key variables         | Debugging vars  |
+| 📞 Function Stack | Call hierarchy        | Flow tracing    |
+| 🔍 Deep Dive      | Variable analysis     | Data structures |
+| 🌊 Control Flow   | Logic paths           | Debugging flow  |
+| 📃 Complex Data   | Nested structures     | Data modeling   |
+| ⚡ Performance     | Metrics               | Speed tuning    |
+| 🐛 Error Invest.  | Root cause            | Bug hunting     |
+| 🤖 Full AI        | Everything            | Deep dive       |
+| ⚙ Custom          | Tailored              | Your way        |
 
 ---
 
-## 📋 Language Support
+## ⌨️ Keyboard Shortcuts
 
-### 🐹 Go
-
-* **Debugger**: Delve
-* **Features**: Goroutine analysis, pointer dereferencing
-* **Files**: `.go`
-
-### 🐍 Python
-
-* **Debugger**: debugpy
-* **Features**: Async/await analysis, module tracking
-* **Files**: `.py`, `.pyw`
-
-### ⚡ JavaScript/TypeScript
-
-* **Debugger**: Node.js, Chrome
-* **Features**: Closure & prototype chain analysis
-* **Files**: `.js`, `.ts`, `.mjs`, `.tsx`, `.cjs`
+| Shortcut                  | Action                 |
+| ------------------------- | ---------------------- |
+| Ctrl+Shift+D Ctrl+Shift+A | Open Context Analyzer  |
+| Ctrl+Shift+D R            | Refresh Debug Context  |
+| Ctrl+Shift+D Ctrl+Shift+C | Configure AI Assistant |
+| Ctrl+Shift+D Ctrl+Shift+G | Show Execution Graph   |
 
 ---
 
-## 🎛️ Configuration
+## 🎯 Usage Examples
 
-### Multi-Language
+### Example 1: Quick Bug Fix (Go)
+
+```go
+func processOrder(order *Order) error {
+    if order == nil { // 🚩 Breakpoint
+        return errors.New("order is nil")
+    }
+    // ...
+}
+```
+
+> Select "Quick Fix Context" → Open side panel → Ask Copilot: *Why is my order nil?*
+
+### Example 2: Complex Data (Python)
+
+```python
+def analyze_data(dataset):
+    results = {}
+    for item in dataset:  # 🚩
+        results[item.id] = transform(item)
+    return results
+```
+
+> Select "Complex Data" → Ask Copilot: *Optimize this loop*
+
+### Example 3: Performance (TypeScript)
+
+```ts
+async function fetchUserData(userId: string) {
+    const start = performance.now();
+    const user = await db.findUser(userId);  // 🚩
+    const end = performance.now();
+    console.log(`Query took ${end - start}ms`);
+    return user;
+}
+```
+
+> Select "Performance" → Ask Copilot: *Optimize DB call*
+
+---
+
+## 🔧 Configuration
+
+### AI Provider
 
 ```json
 {
-  "universalDebugger.multiLanguage.enabled": true,
-  "universalDebugger.multiLanguage.autoDetection": true,
-  "universalDebugger.variableAnalysis.maxDepth": 6,
-  "universalDebugger.variableAnalysis.memoryLimitMB": 50
+  "coDebugger.llm.provider": "openai",
+  "coDebugger.llm.model": "gpt-4",
+  "coDebugger.llm.temperature": 0.3,
+  "coDebugger.llm.maxTokens": 4000
+}
+```
+
+### Variable Analysis
+
+```json
+{
+  "coDebugger.variableAnalysis.maxVariableValueLength": 500,
+  "coDebugger.variableAnalysis.enableTypeInference": true,
+  "coDebugger.businessLogic.enableDetection": true
 }
 ```
 
@@ -123,287 +190,123 @@ ext install NandamYashwanth.go-debugger-ai
 
 ```json
 {
-  "goDebugger.variableAnalysis.maxVariableValueLength": 500,
-  "goDebugger.variableAnalysis.enableTypeInference": true,
-  "goDebugger.businessLogic.applicationPatterns": [
-    "Handler)", "Controller)", "Service)", "Repository)",
-    ".Get", ".Post", ".Put", ".Delete", ".Create", ".Update"
-  ]
-}
-```
-
-### AI Provider
-
-```json
-{
-  "contextSelector.llm.provider": "openai",
-  "contextSelector.llm.openaiApiKey": "sk-...",
-  "contextSelector.llm.model": "gpt-4",
-  "contextSelector.llm.temperature": 0.3,
-  "contextSelector.llm.maxTokens": 4000
+  "coDebugger.languageSpecific.java.maxVariableDepth": 4,
+  "coDebugger.languageSpecific.cpp.analyzeSTLContainers": true,
+  "coDebugger.languageSpecific.cpp.memoryLimitMB": 60
 }
 ```
 
 ---
 
-## 🎮 Commands
+## 🌟 Advanced Features
 
-| Command                                      | Description                  |
-| -------------------------------------------- | ---------------------------- |
-| `Universal Debug: Open Context Analyzer`     | Opens debugging context view |
-| `Universal Debug: Refresh Debug Context`     | Manually refresh context     |
-| `Universal Debug: Show Execution Path Graph` | Show execution flow          |
-| `Universal Debug: Check Debugger Status`     | Show language + connection   |
-| `Universal Debug: Export Debug Analysis`     | Save context data to file    |
+### Symbolic Execution
 
----
+* Branch prediction
+* Constraint solving
+* Alternate path analysis
 
-## 📱 User Interface
+### Path Sensitivity
 
-### Context Analyzer
-
-* Variable Inspector
-* Function Call Stack
-* Execution Paths
-* AI Analysis
-
-### Execution Path Graph
-
-* Visual Flow
-* Alternative Paths
-* Risk Analysis
-* Performance Metrics
-
----
-
-## 🔧 Advanced Features
+* Variable flow
+* Critical path detection
+* Convergence analysis
 
 ### Variable Expansion
 
-```json
-{
-  "universalDebugger.languageSpecific.go.maxVariableDepth": 6,
-  "universalDebugger.languageSpecific.python.maxVariableDepth": 4,
-  "universalDebugger.languageSpecific.javascript.maxVariableDepth": 5,
-  "universalDebugger.languageSpecific.javascript.analyzeClosures": true,
-  "universalDebugger.languageSpecific.python.enableAsyncAnalysis": true
-}
-```
-
-### Symbolic Execution & Path Analysis
-
-* Constraint Tracking
-* Root Cause Analysis
-* Conflict Detection
-* Performance Monitoring
-
----
-
-## 🎯 Use Cases
-
-### 🐛 Bug Investigation
-
-1. Set breakpoint
-2. Start debug session
-3. Open Context Analyzer
-4. Inspect AI insights
-5. Review alternative paths
-
-### 🔍 Code Understanding
-
-1. Set breakpoints in key functions
-2. Debug with sample input
-3. View Execution Path Graph
-4. Export context data
-
-### ⚡ Performance Analysis
-
-1. Enable memory tracking
-2. Set breakpoints
-3. Monitor variable + execution cost
-
----
-
-## 🤝 Language-Specific Examples
-
-### Go
-
-```go
-func processUser(ctx context.Context, userID int64) (*User, error) {
-    user, err := userRepo.GetByID(ctx, userID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get user: %w", err)
-    }
-    return user, nil
-}
-```
-
-### Python
-
-```python
-async def process_data(data_source: str) -> Dict[str, Any]:
-    async with aiohttp.ClientSession() as session:
-        response = await session.get(data_source)
-        data = await response.json()
-        return data
-```
-
-### JavaScript
-
-```js
-function processApiResponse(response) {
-    const { data, status, headers } = response;
-    return data.map(item => ({ id: item.id, name: item.name, processed: true }));
-}
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Extension Not Activating
-
-```sh
-# Ensure session type is go, python, debugpy, node, chrome
-```
-
-### Language Detection Issues
-
-```json
-{
-  "type": "go",
-  "request": "launch",
-  "program": "${workspaceFolder}"
-}
-```
-
-### AI Issues
-
-* Verify API key
-* Check connectivity
-* Inspect output panel
-
-### Performance Tweaks
-
-```json
-{
-  "universalDebugger.variableAnalysis.maxDepth": 3,
-  "universalDebugger.variableAnalysis.memoryLimitMB": 25
-}
-```
-
----
-
-## 📊 Performance Metrics
-
-* Collection Time
-* Variable Count
-* Memory Usage
-* Symbolic Analysis Time
-* Path Sensitivity Time
-* Language
+* Configurable depth
+* Type-aware expansion
+* JSON export
 
 ---
 
 ## 🛠️ Development
 
-### Build From Source
-
-```sh
+```bash
 git clone https://github.com/yashwanthnandam/go-debugger-ai.git
-cd go-debugger-ai/extension
+cd go-debugger-ai
 npm install
-npm run compile
+npm run watch
 npm run package
 ```
 
-### Contributing
+---
 
-1. Fork & branch
-2. Develop & test
-3. PR with description
+## 🤝 Contributing
 
-### Architecture
+We welcome contributions! See `CONTRIBUTING.md`
 
-```
-src/
-├── extension.ts
-├── detection/languageDetector.ts
-├── factories/debuggerFactory.ts
-├── languages/{go,python,javascript}Handler.ts
-├── protocols/*Protocol.ts
-├── services/{contextCollector,llmService,...}.ts
-├── views/{contextSelectorView,executionPathGraphView}.ts
+**Ideas:**
+
+* 🌍 New language support (Rust, Kotlin, Swift)
+* 🤖 More AI models (Gemini, Cohere, local LLMs)
+* 🔍 Improved symbolic engine
+* 📊 Graph/Chart visualizations
+* 🧪 Tests
+* 📖 Docs
+
+---
+
+## 📚 Documentation
+
+* User Guide
+* Configuration Reference
+* AI Integration Guide
+* Multi-language Support
+* API Docs
+* Troubleshooting
+
+---
+
+## 🚑 Troubleshooting
+
+**"Not appearing"**
+
+* Ensure you're in a supported debug session
+* Hit a breakpoint
+* Restart VS Code
+
+**"AI config failed"**
+
+* Check key/credits/network
+* Try other provider
+
+**"Slow context gen"**
+
+* Reduce depth
+* Fewer variables
+* Check memory limit
+
+**"Copilot can't find file"**
+
+* File should be in Column 2
+* Reopen if closed accidentally
+
+**Logs:**
+
+```bash
+# Developer tools
+> Reload Window → Output → Co Debugger AI
 ```
 
 ---
 
-## 📚 API Documentation
+## 📄 License
 
-### LanguageHandler Interface
-
-```ts
-interface LanguageHandler {
-  inferType(...): string;
-  parseVariableValue(...): ParsedValue;
-  extractFunctionName(...): string;
-  isSystemVariable(...): boolean;
-  isApplicationRelevant(...): boolean;
-}
-```
-
-### DebuggerProtocol Interface
-
-```ts
-interface DebuggerProtocol {
-  attachToSession(...): void;
-  getStackTrace(): Promise<DebugFrame[]>;
-  getCurrentFrame(): Promise<DebugFrame | null>;
-}
-```
+[MIT License](LICENSE)
 
 ---
-
-## 🔗 Links
-
-* **GitHub**: [go-debugger-ai](https://github.com/yashwanthnandam/go-debugger-ai)
-* **VS Code Marketplace**: Universal Debugger AI
-* **Issues**: Report bugs / request features
-* **Discussions**: Community forum
-
----
-
-## 📜 License
-
-MIT License – See LICENSE file
 
 ## 🙏 Acknowledgments
 
-* VS Code Team
-* Delve / Go Team
-* Python debugpy
-* OpenAI & Anthropic
-* Community Contributors
+* VS Code team
+* Delve project
+* OpenAI/Anthropic
+* GitHub Copilot
 
 ---
-
-## 📈 Changelog
-
-### v2.0.0 (2025-06-13)
-
-* Multi-Language: Python, JS, TS
-* Enhanced AI Context Analysis
-* Universal Variable Inspection
-* Performance & Speed Optimizations
-* Seamless Language Switching
-
-### v1.0.4
-
-* Symbolic Execution
-* Path Sensitivity
-* Deep Variable Expansion
-* AI Code Analysis
-
 ---
 
-> Happy Debugging! 🐛➡️✨
+Made with ❤️ by Yashwanth Nandam
+
+**Co Debugger AI - Intelligent debugging for the modern developer**

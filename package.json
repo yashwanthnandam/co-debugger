@@ -1,8 +1,8 @@
 {
   "name": "go-debugger-ai",
-  "displayName": "Universal Debugger AI",
+  "displayName": "Co Debugger AI",
   "description": "AI-powered multi-language debugging with symbolic execution and path-sensitivity analysis",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "publisher": "NandamYashwanth",
   "author": {
     "name": "Yashwanth Nandam",
@@ -11,11 +11,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yashwanthnandam/go-debugger-ai.git"
+    "url": "https://github.com/yashwanthnandam/co-debugger.git"
   },
-  "homepage": "https://github.com/yashwanthnandam/go-debugger-ai#readme",
+  "homepage": "https://github.com/yashwanthnandam/co-debugger#readme",
   "bugs": {
-    "url": "https://github.com/yashwanthnandam/go-debugger-ai/issues"
+    "url": "https://github.com/yashwanthnandam/co-debugger/issues"
   },
   "engines": {
     "vscode": "^1.60.0"
@@ -31,6 +31,9 @@
     "python",
     "javascript",
     "typescript",
+    "java",
+    "cpp",
+    "c++",
     "debugger",
     "ai",
     "debugging",
@@ -40,9 +43,14 @@
     "multi-language",
     "universal",
     "delve",
+    "gdb",
+    "lldb",
+    "jdb",
     "llm",
     "chatgpt",
-    "anthropic"
+    "anthropic",
+    "co-pilot",
+    "assistant"
   ],
   "galleryBanner": {
     "color": "#00ADD8",
@@ -56,10 +64,18 @@
     "onDebugSessionType:node",
     "onDebugSessionType:chrome",
     "onDebugSessionType:typescript",
+    "onDebugSessionType:java",
+    "onDebugSessionType:cppdbg",
+    "onDebugSessionType:cppvsdbg",
+    "onDebugSessionType:lldb",
+    "onDebugSessionType:gdb",
     "onLanguage:go",
     "onLanguage:python",
     "onLanguage:javascript",
-    "onLanguage:typescript"
+    "onLanguage:typescript",
+    "onLanguage:java",
+    "onLanguage:cpp",
+    "onLanguage:c"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -67,94 +83,240 @@
       {
         "command": "contextSelector.openView",
         "title": "Open Context Analyzer",
-        "category": "Universal Debug",
+        "category": "Co Debug",
         "icon": "$(graph-line)"
       },
       {
         "command": "contextSelector.refreshContext",
         "title": "Refresh Debug Context",
-        "category": "Universal Debug",
+        "category": "Co Debug",
         "icon": "$(refresh)"
       },
       {
         "command": "contextSelector.exportContext",
         "title": "Export Debug Analysis",
-        "category": "Universal Debug",
+        "category": "Co Debug",
         "icon": "$(export)"
       },
       {
         "command": "contextSelector.showExecutionGraph",
         "title": "Show Execution Path Graph",
-        "category": "Universal Debug"
+        "category": "Co Debug"
       },
       {
         "command": "contextSelector.checkStopped",
         "title": "Check Debugger Status",
-        "category": "Universal Debug",
+        "category": "Co Debug",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "coDebugger.configureAI",
+        "title": "Configure AI Assistant",
+        "category": "Co Debug",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "quickDebugAI.attachToCopilot",
+        "title": "Attach to Copilot",
+        "category": "Co Debug",
+        "icon": "$(attach)"
+      },
+      {
+        "command": "quickDebugAI.askAI",
+        "title": "Ask AI",
+        "category": "Co Debug",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "quickDebugAI.selectAll",
+        "title": "Select All",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "quickDebugAI.selectNone",
+        "title": "Select None",
+        "icon": "$(close-all)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "contextSelector.openView",
+        "key": "ctrl+shift+d ctrl+shift+a",
+        "mac": "cmd+shift+d cmd+shift+a",
+        "when": "debuggersAvailable"
+      },
+      {
+        "command": "contextSelector.refreshContext",
+        "key": "ctrl+shift+d r",
+        "mac": "cmd+shift+d r",
+        "when": "inDebugMode"
+      },
+      {
+        "command": "coDebugger.configureAI",
+        "key": "ctrl+shift+d ctrl+shift+c",
+        "mac": "cmd+shift+d cmd+shift+c"
+      },
+      {
+        "command": "contextSelector.showExecutionGraph",
+        "key": "ctrl+shift+d ctrl+shift+g",
+        "mac": "cmd+shift+d cmd+shift+g",
+        "when": "inDebugMode"
+      },
+      {
+        "command": "quickDebugAI.attachToCopilot",
+        "key": "ctrl+shift+d ctrl+shift+q",
+        "mac": "cmd+shift+d cmd+shift+q",
+        "when": "inDebugMode"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "contextSelector.openView",
-          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb || resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts || resourceExtname == .java || resourceExtname == .cpp || resourceExtname == .c"
         },
         {
           "command": "contextSelector.refreshContext",
-          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb"
         },
         {
           "command": "contextSelector.exportContext",
-          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript"
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb"
+        },
+        {
+          "command": "coDebugger.configureAI",
+          "when": "true"
         }
       ],
       "debug/toolbar": [
         {
           "command": "contextSelector.openView",
-          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb",
           "group": "navigation@1"
+        },
+        {
+          "command": "contextSelector.refreshContext",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb",
+          "group": "navigation@2"
+        }
+      ],
+      "debug/callstack/context": [
+        {
+          "command": "contextSelector.openView",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb",
+          "group": "co-debug@1"
+        }
+      ],
+      "debug/variables/context": [
+        {
+          "command": "contextSelector.openView",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb",
+          "group": "co-debug@1"
+        },
+        {
+          "command": "contextSelector.refreshContext",
+          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || debugType == java || debugType == cppdbg || debugType == lldb",
+          "group": "co-debug@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "contextSelector.openView",
+          "when": "inDebugMode && (resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts || resourceExtname == .java || resourceExtname == .cpp || resourceExtname == .c)",
+          "group": "co-debug@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "quickDebugAI.attachToCopilot",
+          "when": "view == quickDebugAIView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "quickDebugAI.askAI",
+          "when": "view == quickDebugAIView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "quickDebugAI.selectAll",
+          "when": "view == quickDebugAIView",
+          "group": "selection@1"
+        },
+        {
+          "command": "quickDebugAI.selectNone",
+          "when": "view == quickDebugAIView",
+          "group": "selection@2"
+        },
+        {
+          "command": "coDebugger.configureAI",
+          "when": "view == quickDebugAIView",
+          "group": "navigation@3"
         }
       ]
     },
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "universalDebugAnalyzer",
-          "title": "Universal Debug Analyzer",
-          "icon": "assets/icon.png"
+          "id": "coDebugAnalyzer",
+          "title": "Co Debug Analyzer",
+          "icon": "$(debug-alt)"
         }
       ]
     },
     "views": {
-      "universalDebugAnalyzer": [
+      "coDebugAnalyzer": [
         {
-          "id": "contextSelectorView",
-          "name": "Debug Context",
-          "when": "debugType == go || debugType == python || debugType == node || debugType == chrome || debugType == typescript || resourceExtname == .go || resourceExtname == .py || resourceExtname == .js || resourceExtname == .ts",
-          "icon": "assets/icon.png"
+          "id": "quickDebugAIView",
+          "name": "🤖 Quick Debug AI",
+          "when": "true",
+          "icon": "$(robot)"
         }
       ]
     },
     "configuration": {
-      "title": "Universal Debug Context Analyzer",
+      "title": "Co Debug Context Analyzer",
       "properties": {
-        "universalDebugger.multiLanguage.enabled": {
+        "coDebugger.multiLanguage.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable multi-language debugging support"
         },
-        "universalDebugger.multiLanguage.autoDetection": {
+        "coDebugger.multiLanguage.autoDetection": {
           "type": "boolean",
           "default": true,
           "description": "Automatically detect programming language from debug session"
         },
-        "goDebugger.businessLogic.enableDetection": {
+        "coDebugger.languageSpecific.java.maxVariableDepth": {
+          "type": "number",
+          "default": 4,
+          "description": "Java-specific maximum variable expansion depth"
+        },
+        "coDebugger.languageSpecific.java.memoryLimitMB": {
+          "type": "number",
+          "default": 40,
+          "description": "Java-specific memory limit for variable analysis"
+        },
+        "coDebugger.languageSpecific.cpp.maxVariableDepth": {
+          "type": "number",
+          "default": 5,
+          "description": "C++-specific maximum variable expansion depth"
+        },
+        "coDebugger.languageSpecific.cpp.memoryLimitMB": {
+          "type": "number",
+          "default": 60,
+          "description": "C++-specific memory limit for variable analysis"
+        },
+        "coDebugger.languageSpecific.cpp.analyzeSTLContainers": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable detailed STL container analysis in C++"
+        },
+        "coDebugger.businessLogic.enableDetection": {
           "type": "boolean",
           "default": true,
           "description": "Enable automatic business logic detection"
         },
-        "goDebugger.businessLogic.applicationPatterns": {
+        "coDebugger.businessLogic.applicationPatterns": {
           "type": "array",
           "default": [
             "Handler)",
@@ -173,17 +335,17 @@
           ],
           "description": "Patterns to identify application code"
         },
-        "goDebugger.variableAnalysis.maxVariableValueLength": {
+        "coDebugger.variableAnalysis.maxVariableValueLength": {
           "type": "number",
           "default": 500,
           "description": "Maximum length for variable values"
         },
-        "goDebugger.variableAnalysis.enableTypeInference": {
+        "coDebugger.variableAnalysis.enableTypeInference": {
           "type": "boolean",
           "default": true,
           "description": "Enable smart type inference"
         },
-        "contextSelector.llm.provider": {
+        "coDebugger.llm.provider": {
           "type": "string",
           "enum": [
             "openai",
@@ -200,31 +362,58 @@
             "Custom endpoint"
           ]
         },
-        "contextSelector.llm.openaiApiKey": {
+        "coDebugger.llm.openaiApiKey": {
           "type": "string",
           "default": "",
           "description": "OpenAI API key for AI analysis",
           "format": "password"
         },
-        "contextSelector.llm.anthropicApiKey": {
+        "coDebugger.llm.anthropicApiKey": {
           "type": "string",
           "default": "",
           "description": "Anthropic API key for AI analysis",
           "format": "password"
         },
-        "contextSelector.llm.model": {
+        "coDebugger.llm.azureApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI API key",
+          "format": "password"
+        },
+        "coDebugger.llm.azureEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI endpoint URL"
+        },
+        "coDebugger.llm.azureDeploymentName": {
+          "type": "string",
+          "default": "",
+          "description": "Azure OpenAI deployment name"
+        },
+        "coDebugger.llm.customEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Custom API endpoint URL"
+        },
+        "coDebugger.llm.customApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Custom API key",
+          "format": "password"
+        },
+        "coDebugger.llm.model": {
           "type": "string",
           "default": "gpt-4",
           "description": "AI model to use for analysis"
         },
-        "contextSelector.llm.temperature": {
+        "coDebugger.llm.temperature": {
           "type": "number",
           "default": 0.3,
           "minimum": 0,
           "maximum": 2,
           "description": "AI response creativity (0-2)"
         },
-        "contextSelector.llm.maxTokens": {
+        "coDebugger.llm.maxTokens": {
           "type": "number",
           "default": 4000,
           "minimum": 100,
@@ -243,8 +432,7 @@
     "lint": "echo \"No linting configured\" && exit 0"
   },
   "dependencies": {
-    "node-fetch": "^2.6.7",
-    "glob": "^8.0.3"
+    "node-fetch": "^2.6.7"
   },
   "devDependencies": {
     "@types/node": "^16.18.126",
