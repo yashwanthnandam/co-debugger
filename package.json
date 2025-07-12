@@ -2,7 +2,7 @@
   "name": "go-debugger-ai",
   "displayName": "Co Debugger AI",
   "description": "AI-powered multi-language debugging with symbolic execution and path-sensitivity analysis",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "publisher": "NandamYashwanth",
   "author": {
     "name": "Yashwanth Nandam",
@@ -251,15 +251,6 @@
           "command": "coDebugger.configureAI",
           "when": "view == quickDebugAIView",
           "group": "navigation@3"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "coDebugAnalyzer",
-          "title": "Co Debug Analyzer",
-          "icon": "$(debug-alt)"
         }
       ]
     },

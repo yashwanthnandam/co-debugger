@@ -10,6 +10,7 @@ import { DebuggerFactory } from './factories/debuggerFactory';
 import { SupportedLanguage } from './languages/languageHandler';
 import { AIConfigurationService } from './services/aiConfigurationService';
 import { CoDebugAIControl } from './views/coDebugAIControl';
+import { trackEvent } from './analytics';
 import * as os from 'os';
 
 let contextCollector: ContextCollector;
@@ -30,7 +31,20 @@ function getCurrentTimestamp(): string {
     return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
+// For DAU tracking
+let lastActiveEventDate: string | null = null;
+function sendDailyActiveEvent() {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    if (lastActiveEventDate !== today) {
+        trackEvent('daily_active_user', { client_id: getCurrentUser(), date: today });
+        lastActiveEventDate = today;
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
+    trackEvent('extension_activated', { client_id: getCurrentUser() }); // Analytics: extension activated
+    sendDailyActiveEvent(); 
+
     console.log(`✅ Co Debugger AI: Activated at ${getCurrentTimestamp()} (User: ${getCurrentUser()})`);
 
     // Initialize services
@@ -41,16 +55,19 @@ export function activate(context: vscode.ExtensionContext) {
     // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('contextSelector.openView', () => {
+            sendDailyActiveEvent();
             console.log(`📱 Opening Context Selector view at ${getCurrentTimestamp()}`);
             contextSelectorView?.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.showExecutionGraph', () => {
+            sendDailyActiveEvent();
             console.log(`📊 Opening Execution Path Graph at ${getCurrentTimestamp()}`);
             executionPathGraphView?.show();
         }),
 
         vscode.commands.registerCommand('contextSelector.refreshContext', async () => {
+            sendDailyActiveEvent();
             console.log(`🔄 Manual refresh command triggered for ${currentLanguage || 'unknown'} at ${getCurrentTimestamp()}`);
             try {
                 await contextCollector?.refreshAll();
@@ -63,6 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('contextSelector.checkStopped', () => {
+            sendDailyActiveEvent();
             if (contextCollector && delveClient) {
                 const context = contextCollector.getContext();
                 vscode.window.showInformationMessage(
@@ -77,16 +95,20 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('coDebugger.configureAI', async () => {
+            sendDailyActiveEvent();
+            trackEvent('command_used', { command: 'coDebugger.configureAI', client_id: getCurrentUser() }); // Analytics: command used
             await AIConfigurationService.configureAI(llmService);
         }),
 
         vscode.commands.registerCommand('coDebugAI.showQuickMenu', async () => {
+            sendDailyActiveEvent();
             await coDebugAIControl.showQuickMenu();
         })
     );
 
     // VS Code Debug Event Handlers
     const onStackItemChanged = vscode.debug.onDidChangeActiveStackItem((stackItem) => {
+        sendDailyActiveEvent();
         if (stackItem && isLanguageSupported(stackItem.session.configuration.type)) {
             console.log(`🎯 VS Code active stack item changed at ${getCurrentTimestamp()}:`, {
                 sessionName: stackItem.session.name,
@@ -110,6 +132,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const onDebugSessionStarted = vscode.debug.onDidStartDebugSession((session) => {
+        sendDailyActiveEvent();
         const detectedLanguage = LanguageDetector.detectLanguage(session);
         
         if (isLanguageSupported(session.configuration.type) || LanguageDetector.isLanguageSupported(detectedLanguage)) {
@@ -156,6 +179,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const onDebugSessionTerminated = vscode.debug.onDidTerminateDebugSession((session) => {
+        sendDailyActiveEvent();
         if (currentLanguage && (isLanguageSupported(session.configuration.type) || session === delveClient?.currentSession)) {
             console.log(`🔌 ${currentLanguage} debug session terminated at ${getCurrentTimestamp()}:`, {
                 sessionName: session.name,
@@ -178,6 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const onDebugSessionChanged = vscode.debug.onDidChangeActiveDebugSession((session) => {
+        sendDailyActiveEvent();
         if (session) {
             const detectedLanguage = LanguageDetector.detectLanguage(session);
             
@@ -231,6 +256,7 @@ export function activate(context: vscode.ExtensionContext) {
     const activeStackItem = vscode.debug.activeStackItem;
     
     if (activeSession) {
+        sendDailyActiveEvent();
         const detectedLanguage = LanguageDetector.detectLanguage(activeSession);
         
         if (isLanguageSupported(activeSession.configuration.type) || LanguageDetector.isLanguageSupported(detectedLanguage)) {
